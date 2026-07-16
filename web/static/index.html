@@ -499,7 +499,10 @@ async function mount(m){
   window.fit2d = () => { [x,y,w,h] = vb; apply(); };
   el.addEventListener('wheel', e => {
     e.preventDefault();
-    const k = e.deltaY > 0 ? 1.12 : 1/1.12;
+    // 缩放步长按 deltaY 幅度算，但每次限幅 ±8%，避免触控板连发大 deltaY 时过灵敏。
+    const ZOOM = 0.0015;                                  // 灵敏度系数，越小越平缓
+    const step = Math.max(-0.08, Math.min(0.08, e.deltaY * ZOOM));
+    const k = 1 + step;
     const r = el.getBoundingClientRect();
     const mx = x + (e.clientX-r.left)/r.width*w, my = y + (e.clientY-r.top)/r.height*h;
     x = mx-(mx-x)*k; y = my-(my-y)*k; w *= k; h *= k; apply();
