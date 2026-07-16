@@ -1,0 +1,38 @@
+# ── Input CAD models — NEVER commit (proprietary / confidential) ──
+parts/
+parts_real/
+*.step
+*.stp
+*.STEP
+*.STP
+*.brep
+
+# ── Generated output — reproducible, not source ──
+# web app conversion results (meta.json + drawings + glTF)
+results/
+# CLI output dirs
+out/
+out_*/
+
+# Loose generated drawings anywhere...
+*.svg
+*.dxf
+*.glb
+# ...but keep the bundled front-end assets (three.js etc.)
+!web/static/
+!web/static/**
+
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── OS / editor ──
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,64 @@
+{
+  "_readme": [
+    "器件分类规则库。可自行维护，改完重启服务即生效。",
+    "",
+    "【重要】料号前缀的含义没有任何标准可依据 —— 这不是我们没查到，是标准体系刻意不管：",
+    "  · GB/T 7027《信息分类和编码的基本原则与方法》只规定方法论，不规定码值",
+    "  · JB/T 5054.4-2000 原文：『企业可参照本标准制定细则』——定义权明文下放给企业",
+    "  · ASME Y14.100：料号只需『在本设计单位内唯一』，不规定语义",
+    "  · UNSPSC(2+2+2+2) / eCl@ss(2+2+2+2) / FSC-NSN(2+2) 全部不是 3 位解析单元，对不上",
+    "  · 光模块 MSA(SFF-8636/CMIS/OSFP/CFP) 全部不规定 Vendor PN 语义,",
+    "    CFP MSA 原文：『any combination of letters and/or digits』",
+    "",
+    "所以 prefix_map 里的含义**全部是从客户文件名反推的推断**，必须向客户索取料号类别字典后校正。",
+    "",
+    "分类优先级（name_rules 优先于 prefix_map）：",
+    "  器件名是写在文件里的事实，料号前缀是猜的。MT ASM / FA SM / Housing lid 自解释。",
+    "  这也呼应行业共识：MSA 用 Byte 0 Identifier 而非解析料号；SAP 用 MTART/MATKL 字段。"
+  ],
+
+  "suffix_rules": [
+    {"pattern": "\\bASM\\b", "kind": "组件", "confidence": "high",
+     "note": "Assembly。实测 MT ASM / CB ASM / BOSA ASM / FA ASM / PCBA ASM 一致"},
+    {"pattern": "\\bSM\\b", "kind": "垫块", "confidence": "low",
+     "note": "疑似 Submount。仅 FA SM 一例，存疑，待客户确认"}
+  ],
+
+  "name_rules": [
+    {"pattern": "\\bFA\\b",                "kind": "FA 光纤阵列",   "confidence": "high"},
+    {"pattern": "\\bMT\\b",                "kind": "MT 光纤接头",   "confidence": "high"},
+    {"pattern": "\\bBOSA\\b",              "kind": "BOSA 光组件",   "confidence": "high",
+     "note": "Bi-directional Optical Sub-Assembly"},
+    {"pattern": "lens",                     "kind": "Lens 透镜",     "confidence": "high"},
+    {"pattern": "submount|carrier",         "kind": "垫块",          "confidence": "high"},
+    {"pattern": "housing",                  "kind": "壳体",          "confidence": "high"},
+    {"pattern": "\\bHS\\b|heat\\s*sink",   "kind": "散热器",        "confidence": "high"},
+    {"pattern": "\\bPCBA?\\b",             "kind": "PCB/PCBA",      "confidence": "high"},
+    {"pattern": "\\bCB\\b",                "kind": "载板",          "confidence": "low",
+     "note": "疑似 Carrier Board，待确认"},
+    {"pattern": "screw|bolt|nut|washer",    "kind": "紧固件",        "confidence": "high"},
+    {"pattern": "cover|lid",                "kind": "盖板",          "confidence": "high"},
+    {"pattern": "latch|pull\\s*tab",       "kind": "锁扣/拉带",     "confidence": "high"},
+    {"pattern": "adaptor|adapter",          "kind": "适配件",        "confidence": "high"},
+    {"pattern": "boot",                     "kind": "护套",          "confidence": "medium"}
+  ],
+
+  "prefix_map": {
+    "_note": "全部为推断，非标准。样本内部一致性：304 同时用于 Housing lid 与 housing body。",
+    "_segment_hint": {
+      "2xx": "疑似光学件（220 MT / 285 FA）",
+      "3xx": "疑似结构件/机加件（302 螺钉 / 304 壳体 / 310 拉带 / 314 适配件 / 320 盖板 / 321 散热器）",
+      "5xx": "疑似电子件（504 PCBA）"
+    },
+    "220": {"kind": "MT 光纤接头",  "source": "推断，与 MT FA 图纸 DWG NO. 220-0874 吻合"},
+    "222": {"kind": "垫块",        "source": "推断，来自 Submount 图纸 DWG NO. 222-9999"},
+    "285": {"kind": "FA 光纤阵列",  "source": "推断"},
+    "302": {"kind": "紧固件",      "source": "推断"},
+    "304": {"kind": "壳体",        "source": "推断，lid 与 body 同前缀，一致性较好"},
+    "310": {"kind": "拉带",        "source": "推断"},
+    "314": {"kind": "适配件",      "source": "推断"},
+    "320": {"kind": "盖板",        "source": "推断"},
+    "321": {"kind": "散热器",      "source": "推断"},
+    "504": {"kind": "PCBA",       "source": "推断"}
+  }
+}

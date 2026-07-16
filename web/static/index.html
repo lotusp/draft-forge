@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STEP → 2D 工程图转换</title>
+<style>
+  :root{
+    --bg:#0f1412; --bg2:#151b19; --panel:#1a211e; --line:#2a3330; --ink:#dfe5e2;
+    --dim:#7e8b86; --accent:#ff9500; --accent2:#ffb040;
+    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --blue:#4a9eda;
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;
+       font:13px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  header{height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--bg2);
+         display:flex;align-items:center;gap:14px}
+  h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.02em}
+  h1 b{color:var(--accent)}
+  .sub{color:var(--dim);font-size:11.5px;font-family:var(--mono)}
+  main{display:grid;grid-template-columns:266px 1fr;height:calc(100vh - 52px)}
+  aside{border-right:1px solid var(--line);background:var(--bg2);overflow-y:auto;padding:10px}
+  .content{overflow-y:auto;padding:14px}
+
+  .upload{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;
+          display:flex;flex-direction:column;gap:8px}
+  .upload button{width:100%}
+  input[type=file]{font:11px var(--mono);color:var(--dim);width:100%}
+  input[type=file]::file-selector-button{font:inherit;background:var(--bg2);color:var(--ink);
+    border:1px solid var(--line);border-radius:4px;padding:5px 10px;margin-right:8px;cursor:pointer}
+  input[type=file]::file-selector-button:hover{border-color:var(--accent);color:var(--accent2)}
+  button{font:12px/1 -apple-system,"PingFang SC",system-ui;padding:7px 13px;border-radius:5px;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;
+    transition:.12s}
+  button:hover{border-color:var(--accent);color:var(--accent2)}
+  button.on{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:600}
+  button.primary{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:600}
+  button.primary:hover{background:var(--accent2);color:#1a1200}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  a{color:inherit;text-decoration:none}
+
+  .item{padding:9px 10px;border-radius:5px;cursor:pointer;margin-bottom:3px;
+        border:1px solid transparent;border-left:3px solid transparent}
+  .item:hover{background:var(--panel)}
+  .item.on{background:var(--panel);border-left-color:var(--accent)}
+  .item .row{display:flex;align-items:flex-start;gap:6px}
+  .item .n{font-size:12px;font-weight:500;word-break:break-all;line-height:1.4;flex:1}
+  .item .m{color:var(--dim);font-size:10.5px;font-family:var(--mono);margin-top:3px}
+  .dots{padding:0;width:20px;height:20px;line-height:1;border:none;background:none;
+        color:var(--dim);opacity:0;flex:none;border-radius:3px;font-size:14px}
+  .item:hover .dots,.item.on .dots{opacity:1}
+  .dots:hover{background:var(--line);color:var(--accent2);border:none}
+  .menu{position:fixed;z-index:99;background:var(--panel);border:1px solid var(--line);
+        border-radius:5px;padding:3px;box-shadow:0 6px 20px rgba(0,0,0,.5);min-width:84px}
+  .menu button{display:block;width:100%;text-align:left;border:none;background:none;
+               padding:6px 10px;font-size:12px}
+  .menu button:hover{background:var(--line);color:var(--bad)}
+
+  details.fold{background:var(--bg2);border:1px solid var(--line);border-radius:7px;
+               margin-bottom:12px}
+  details.fold > summary{padding:12px 16px;cursor:pointer;font-size:11px;font-weight:600;
+    letter-spacing:.1em;color:var(--accent);font-family:var(--mono);list-style:none;
+    display:flex;align-items:center;gap:8px}
+  details.fold > summary::-webkit-details-marker{display:none}
+  details.fold > summary::before{content:'▸';font-size:10px;transition:.15s;color:var(--dim)}
+  details.fold[open] > summary::before{transform:rotate(90deg)}
+  details.fold > summary:hover{color:var(--accent2)}
+  details.fold > summary .hint{margin-left:auto;font-weight:400;letter-spacing:0;
+    color:var(--dim);font-size:11px;text-transform:none}
+  details.fold .body{padding:0 16px 14px}
+
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:7px;
+        padding:14px 16px;margin-bottom:12px}
+  .card h2{font-size:11px;margin:0 0 11px;font-weight:600;letter-spacing:.1em;
+           color:var(--accent);font-family:var(--mono)}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 16px;font-size:12.5px}
+  .kv dt{color:var(--dim);white-space:nowrap}
+  .kv dd{margin:0;word-break:break-word}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500;font-size:10px;letter-spacing:.06em;font-family:var(--mono)}
+  tbody tr:hover{background:var(--panel)}
+  tbody tr:last-child td{border-bottom:none}
+  code{font:11.5px var(--mono);background:var(--panel);padding:1px 5px;border-radius:3px;
+       color:var(--accent2)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10.5px;
+       font-family:var(--mono);background:var(--panel);color:var(--dim);
+       border:1px solid var(--line)}
+  .tag.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
+  .tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
+  .tag.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+  .note{padding:8px 11px;border-radius:4px;font-size:12px;margin-top:8px;
+        background:var(--panel);border-left:2px solid var(--dim);color:var(--ink)}
+  .note.ok{border-color:var(--ok)} .note.warn{border-color:var(--warn)}
+  .note.bad{border-color:var(--bad)}
+  .stages{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0}
+  .st{padding:3px 9px;border-radius:3px;font-size:10.5px;font-family:var(--mono);
+      background:var(--panel);color:var(--dim);border:1px solid var(--line)}
+  .st.on{background:var(--accent);color:#1a1200;border-color:var(--accent);font-weight:600}
+  .st.past{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
+
+  /* 3D / 2D 并排 */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:1280px){.split{grid-template-columns:1fr}}
+  .pane{border:1px solid var(--line);border-radius:6px;overflow:hidden;position:relative;
+        height:56vh;min-height:400px}
+  #view3d{background:linear-gradient(180deg,#10201c,#0b1210)}
+  #view3d canvas{display:block;width:100%;height:100%}
+  #view2d{background:#fff}
+  #view2d svg{width:100%;height:100%;display:block;cursor:grab}
+  .pane .lbl{position:absolute;top:8px;left:10px;font:10px var(--mono);letter-spacing:.1em;
+             color:var(--dim);background:color-mix(in srgb,var(--bg) 75%,transparent);
+             padding:3px 7px;border-radius:3px;pointer-events:none;z-index:2}
+  #view2d .lbl{color:#555;background:rgba(255,255,255,.8)}
+  .bar{display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap}
+  .empty{color:var(--dim);text-align:center;padding:60px 20px;font-size:12.5px}
+  .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);
+        border-radius:50%;animation:r .8s linear infinite;display:inline-block}
+  @keyframes r{to{transform:rotate(360deg)}}
+  .sync{font-size:11px;color:var(--dim);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<header>
+  <h1>STEP <b>→</b> 2D 工程图转换</h1>
+  <span class="sub">三视图 · PMI 驱动标注</span>
+</header>
+
+<main>
+  <aside>
+    <!-- 上传放在左列顶部：导入后结果直接出现在正下方的列表里，视线不用来回跳 -->
+    <div class="upload">
+      <input type="file" id="f" accept=".step,.stp,.STEP,.STP">
+      <button class="primary" id="go">开始转换</button>
+    </div>
+    <div class="sub" style="margin:14px 4px 8px">历史</div>
+    <div id="list"></div>
+  </aside>
+  <div class="content" id="detail"><div class="empty">选择 STEP 文件开始</div></div>
+</main>
+
+<!-- three.js 本地化（MIT），无 CDN 依赖，离线可跑。
+     ⚠️ 必须保留 three.js 的原始目录结构，不能拍平：
+        · three.module.min.js 内部 import "./three.core.min.js"（新版拆成两个文件）
+        · GLTFLoader.js 内部 import "../utils/BufferGeometryUtils.js"（相对路径）
+        拍平后这些相对路径会解析到不存在的位置，模块**静默解析失败**——
+        表现为所有文件 HTTP 200 但依赖请求根本不发出，且 import() 只报
+        "Failed to fetch dynamically imported module"，极难定位。 -->
+<script type="importmap">
+{"imports":{
+  "three":"/static/vendor/three.module.min.js",
+  "three/addons/":"/static/vendor/addons/"
+}}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const $ = s => document.querySelector(s);
+let cur = null, timer = null, V3 = null;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// 后端文案里用 **粗体** 与 `代码` 标重点。先转义再渲染 —— 顺序反了就是 XSS。
+const mk = s => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(/`([^`]+?)`/g, '<code>$1</code>');
+
+// ─────────────────────────────────────────── 3D 视图
+// glTF 导出时 build123d 已把 OCCT 的 +Z up 转成 glTF 的 +Y up，
+// 故模型坐标 (x,y,z)_step -> (x, z, -y)_gltf。相机方向需同样映射。
+const toGltfDir = ([x, y, z]) => new THREE.Vector3(x, z, -y);
+
+function make3D(box, url, dirs){
+  const w = box.clientWidth, h = box.clientHeight;
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(35, w/h, 0.1, 1e5);
+  const rnd = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  rnd.setSize(w, h); rnd.setPixelRatio(Math.min(devicePixelRatio, 2));
+  box.appendChild(rnd.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+  const key = new THREE.DirectionalLight(0xffffff, 2.2); key.position.set(1,2,1.5);
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xff9500, .5); fill.position.set(-1,-.5,-1);
+  scene.add(fill);
+
+  const ctl = new OrbitControls(cam, rnd.domElement);
+  ctl.enableDamping = true; ctl.dampingFactor = .08;
+
+  const api = {scene, cam, ctl, rnd, center:new THREE.Vector3(),
+               bbox:new THREE.Box3(), dirs, box, view:'iso'};
+  new GLTFLoader().load(url, g => {
+    g.scene.traverse(o => {
+      if(o.isMesh) o.material = new THREE.MeshStandardMaterial({
+        color:0x8fa8b8, metalness:.35, roughness:.55, side:THREE.DoubleSide});
+    });
+    scene.add(g.scene);
+    api.bbox.setFromObject(g.scene);
+    api.bbox.getCenter(api.center);
+    ctl.target.copy(api.center);
+    setView('iso');
+  }, undefined, e => { box.innerHTML = `<div class="empty">3D 载入失败：${esc(e.message||e)}</div>` });
+
+  const loop = () => { api.raf = requestAnimationFrame(loop); ctl.update(); rnd.render(scene, cam); };
+  loop();
+  const ro = new ResizeObserver(() => {
+    const w = box.clientWidth, h = box.clientHeight;
+    if(!w || !h) return;
+    cam.aspect = w/h; cam.updateProjectionMatrix(); rnd.setSize(w, h);
+    if(!api.bbox.isEmpty()) setView(api.view);      // 尺寸变了要重新取景
+  });
+  ro.observe(box);
+  api.dispose = () => { cancelAnimationFrame(api.raf); ro.disconnect(); rnd.dispose(); };
+  return api;
+}
+
+// 相机对准某个 2D 视图的投影方向 —— 这是 3D/2D 比对的关键
+window.setView = key => {
+  if(!V3) return;
+  const {cam, ctl, center, bbox, dirs} = V3;
+  let d, up = new THREE.Vector3(0,1,0);
+  if(key === 'iso'){ d = new THREE.Vector3(1,.75,1).normalize(); }
+  else {
+    const raw = dirs?.[key];
+    if(!raw) return;
+    d = toGltfDir(raw).normalize();
+    // 主视图/侧视图的 up 是模型 +Z -> glTF +Y；俯视图的 up 是模型 +Y -> glTF -Z
+    if(key === 'top') up = new THREE.Vector3(0,0,-1);
+  }
+
+  // 按包围盒在**相机平面上的实际投影范围**取距，而不是用包围球乘固定倍数
+  //  —— 长条形零件（如 122mm 的 QSFP 模块）端视时包围球远大于实际投影，
+  //     用固定倍数会把模型顶得很小。
+  const z = d.clone().normalize();
+  const x = new THREE.Vector3().crossVectors(up, z).normalize();
+  const y = new THREE.Vector3().crossVectors(z, x);
+  let ex = 0, ey = 0, ez = 0;
+  for(const sx of [bbox.min.x, bbox.max.x])
+    for(const sy of [bbox.min.y, bbox.max.y])
+      for(const sz of [bbox.min.z, bbox.max.z]){
+        const v = new THREE.Vector3(sx, sy, sz).sub(center);
+        ex = Math.max(ex, Math.abs(v.dot(x)));
+        ey = Math.max(ey, Math.abs(v.dot(y)));
+        ez = Math.max(ez, Math.abs(v.dot(z)));
+      }
+  const half = THREE.MathUtils.degToRad(cam.fov) / 2;
+  const dist = Math.max(ey / Math.tan(half), ex / (Math.tan(half) * cam.aspect)) * 1.18 + ez;
+
+  cam.position.copy(center).addScaledVector(z, dist);
+  cam.up.copy(up); ctl.target.copy(center); cam.lookAt(center);
+  cam.near = Math.max(dist * 1e-3, 1e-3); cam.far = dist * 10;
+  cam.updateProjectionMatrix(); ctl.update();
+  V3.view = key;
+  document.querySelectorAll('[data-v]').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === key));
+};
+
+// ─────────────────────────────────────────── 列表 / 轮询
+function closeMenus(){ document.querySelectorAll('.menu').forEach(m => m.remove()); }
+document.addEventListener('click', closeMenus);
+
+async function loadList(){
+  const rs = await (await fetch('/api/results')).json();
+  $('#list').innerHTML = rs.map(r => `
+    <div class="item ${r.id===cur?'on':''}" data-id="${esc(r.id)}">
+      <div class="row">
+        <div class="n">${esc(r.filename)}</div>
+        <button class="dots" data-more="${esc(r.id)}" title="更多">⋯</button>
+      </div>
+      <div class="m">${esc(r.protocol||'?')} · ${r.is_assembly?'装配体':'单件'} ·
+        ${r.status==='done'?'<span style="color:var(--ok)">✓</span>'
+         :r.status==='failed'?'<span style="color:var(--bad)">✗</span>':'…'}</div>
+    </div>`).join('') || '<div class="sub" style="padding:8px">暂无</div>';
+
+  $('#list').querySelectorAll('.item').forEach(el =>
+    el.onclick = e => { if(!e.target.closest('.dots')) open_(el.dataset.id); });
+
+  $('#list').querySelectorAll('.dots').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const open = document.querySelector('.menu');
+    closeMenus();
+    if(open) return;                       // 再次点击同一按钮 = 关闭
+    const id = b.dataset.more;
+    const m = document.createElement('div');
+    m.className = 'menu';
+    m.innerHTML = `<button data-act="del">删除</button>`;
+    const r = b.getBoundingClientRect();
+    m.style.left = (r.right - 84) + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    m.onclick = ev => ev.stopPropagation();
+    m.querySelector('[data-act=del]').onclick = async () => {
+      closeMenus();
+      await fetch('/api/results/' + encodeURIComponent(id), {method:'DELETE'});
+      if(cur === id){                      // 删的是当前打开的 -> 清空右侧
+        cur = null; clearInterval(timer);
+        if(V3){ V3.dispose(); V3 = null; }
+        $('#detail').innerHTML = '<div class="empty">选择 STEP 文件开始</div>';
+      }
+      loadList();
+    };
+    document.body.appendChild(m);
+  });
+}
+
+$('#go').onclick = async () => {
+  const f = $('#f').files[0];
+  if(!f) return alert('请先选择 STEP 文件');
+  $('#go').disabled = true; $('#go').textContent = '上传中…';
+  const fd = new FormData(); fd.append('file', f);
+  try{
+    const r = await (await fetch('/api/convert', {method:'POST', body:fd})).json();
+    await loadList(); open_(r.id);
+  } finally { $('#go').disabled = false; $('#go').textContent = '开始转换'; }
+};
+
+async function open_(id){
+  cur = id; clearInterval(timer);
+  if(V3){ V3.dispose(); V3 = null; }
+  await loadList();
+  const tick = async () => {
+    const m = await (await fetch('/api/results/' + encodeURIComponent(id))).json();
+    render(m);
+    if(m.status !== 'converting'){ clearInterval(timer); loadList(); }
+  };
+  await tick();
+  timer = setInterval(tick, 1500);
+}
+window.open_ = open_;
+
+// ─────────────────────────────────────────── 渲染
+const pill = (v, good) => `<span class="tag ${good?'ok':'bad'}">${esc(v)}</span>`;
+
+function render(m){
+  const P = [];
+  P.push(`<div class="card"><h2>① 文件与协议</h2><dl class="kv">
+    <dt>文件</dt><dd>${esc(m.filename)} · ${m.size_mb} MB · ${(m.n_entities||0).toLocaleString()} 实体</dd>
+    <dt>协议</dt><dd>${pill(m.protocol, m.carries_pmi)} <code>${esc(m.schema_raw)}</code></dd>
+    <dt>来源 CAD</dt><dd>${esc(m.source_cad)||'<span class="sub">未标注</span>'}</dd>
+    <dt>导出时间</dt><dd><span class="sub">${esc(m.exported_at)||'—'}</span></dd>
+  </dl>${m.carries_pmi?'':`<div class="note warn"><b>${esc(m.protocol)} 不承载 PMI</b>
+    —— 这不是模型没标，是协议不支持。要做公差标注必须改导 STEP AP242。</div>`}</div>`);
+
+  P.push(`<div class="card"><h2>② 结构</h2><dl class="kv">
+    <dt>类型</dt><dd><b style="color:var(--accent2)">${m.is_assembly?'装配体':'单个零件'}</b>
+      ${m.is_assembly?`<span class="sub">· ${m.n_products} 个产品节点 · ${m.n_asm_links} 条装配关系</span>`:''}</dd>
+    <dt>实体/面/边</dt><dd><code>${m.n_solids}</code> / <code>${(m.n_faces||0).toLocaleString()}</code>
+      / <code>${(m.n_edges||0).toLocaleString()}</code></dd>
+    <dt>面类型</dt><dd class="sub">${Object.entries(m.face_types||{}).map(([k,v])=>`${k} ${v}`).join(' · ')||'—'}</dd>
+  </dl></div>`);
+
+  const pmiOk = m.pmi_dims > 0;
+  P.push(`<div class="card"><h2>③ PMI 产品制造信息</h2><dl class="kv">
+    <dt>语义尺寸 / 几何公差 / 基准</dt>
+    <dd><code>${m.pmi_dims}</code> / <code>${m.pmi_gtols}</code> / <code>${m.pmi_datums}</code></dd>
+  </dl><div class="note ${pmiOk?'ok':'warn'}">${mk(m.pmi_note)}</div>
+  ${m.pmi_applied?.length?`<div style="margin-top:9px">
+    <div class="sub" style="margin-bottom:4px">PMI 驱动标注：</div>
+    ${m.pmi_applied.map(x=>`<div style="font-size:12px;padding:1px 0">
+      <span style="color:${x.view?'var(--ok)':'var(--dim)'}">${x.view?'✓':'✗'}</span>
+      <code>${esc(x.label)}</code> ${x.view?`<span class="sub">→ ${esc(x.view)} 视图</span>`
+      :`<span class="sub">${esc(x.note)}</span>`}</div>`).join('')}</div>`:''}</div>`);
+
+  // —— 主角：3D/2D 对比放前面，细节折叠到后面
+  P.push(renderView(m));
+
+  if(m.parts?.length){
+    const low = m.parts.filter(p => p.confidence === 'low' || p.kind === '未识别').length;
+    P.push(`<details class="fold"><summary>⑤ 器件分类
+      <span class="hint">${m.parts.length} 个${low?` · ${low} 个存疑`:''} · 点击展开</span></summary>
+      <div class="body">
+      <table><thead><tr><th>器件名</th><th>料号</th><th>类别</th><th>判据</th></tr></thead><tbody>
+      ${m.parts.map(p=>`<tr><td><b>${esc(p.name)}</b></td>
+        <td>${p.pn_full?`<code>${esc(p.pn_full)}</code>`:'<span class="sub">—</span>'}</td>
+        <td>${esc(p.kind)} ${p.confidence==='low'?'<span class="tag warn">存疑</span>':''}</td>
+        <td class="sub">${esc(p.basis)}</td></tr>`).join('')}</tbody></table>
+      <div class="note"><b>料号前缀的含义没有任何标准可依据。</b>
+      GB/T 7027 只规定编码方法论不规定码值；JB/T 5054.4 原文「企业可参照本标准制定细则」；
+      ASME Y14.100 只要求料号在本单位内唯一；UNSPSC/eCl@ss/FSC 全部不是 3 位解析单元。
+      故本表<b>以器件名为主判据</b>（写在文件里的事实），料号前缀仅作辅助，含义待客户提供字典后校正。</div>
+      </div></details>`);
+  }
+
+  const g = m.geomcheck;
+  if(g){
+    // 性能与质量是**两个独立的轴**：cp_max 决定 HLR 快慢，退化面决定几何健康度。
+    // 实测 100G DR1 装配体 cp_max 仅 120（性能轻），却含 6 个退化面（质量差）。
+    const cls = g.perf_class==='重'?'bad':g.perf_class==='中'?'warn':'ok';
+    const nd = g.degenerate?.length || 0;
+    P.push(`<details class="fold"><summary>⑥ 几何体检
+      <span class="hint">性能 <span class="tag ${cls}">${g.perf_class}</span>${
+        nd?` · 质量 <span class="tag bad">${nd} 个退化面</span>`:` · 质量 <span class="tag ok">正常</span>`
+      } · 点击展开</span></summary><div class="body">
+      <dl class="kv">
+      <dt>性能评级</dt><dd><span class="tag ${cls}">${g.perf_class}</span>
+        <span class="sub">— 由单面控制点密度决定，非面数</span></dd>
+      <dt>B-spline 面</dt><dd><code>${g.n_bspline}</code>${g.n_rational?`<span class="sub"> · 其中 ${g.n_rational} 个有理 NURBS（求交更贵）</span>`:''}</dd>
+      <dt>控制点</dt><dd>单面最大 <code>${g.cp_max}</code> · 平均 <code>${g.cp_avg_bspline}</code>
+        · 合计 <code>${(g.cp_total||0).toLocaleString()}</code></dd>
+      <dt>退化面</dt><dd>${nd?`<span class="tag bad">${nd} 个</span>`:'<span class="tag ok">无</span>'}</dd>
+    </dl>
+    ${nd?`<table style="margin-top:10px"><thead><tr><th>面积 mm²</th><th>约合</th>
+      <th>控制点</th><th>极点分布</th><th>阶</th></tr></thead><tbody>
+      ${g.degenerate.slice(0,8).map(d=>`<tr>
+        <td><code>${d.area_mm2}</code></td>
+        <td class="sub">${Math.sqrt(d.area_mm2).toFixed(2)}×${Math.sqrt(d.area_mm2).toFixed(2)} mm</td>
+        <td><code>${d.control_points}</code></td><td class="sub">${esc(d.poles)}</td>
+        <td class="sub">${d.u_deg}×${d.v_deg}</td></tr>`).join('')}</tbody></table>`:''}
+    ${(g.warnings||[]).map(w=>`<div class="note ${w.includes('🔴')?'bad':'warn'}">${mk(w)}</div>`).join('')}
+      </div></details>`);
+  }
+
+  $('#detail').innerHTML = P.join('');
+  if(m.status==='done') mount(m);
+}
+
+function renderView(m){
+  if(m.status==='converting'){
+    const i = (m.stages||[]).indexOf(m.stage);
+    return `<div class="card"><h2>④ 3D / 2D 对比</h2>
+      <div class="bar"><span class="spin"></span> <b style="color:var(--accent2)">${esc(m.stage||'处理中')}</b></div>
+      <div class="stages">${(m.stages||[]).map((s,k)=>
+        `<span class="st ${k===i?'on':k<i?'past':''}">${esc(s)}</span>`).join('')}</div>
+      <div class="note">OCCT HLR <b>不提供进度回报</b>（官方已知短板），故只报阶段不报百分比。
+      实测耗时 3s ~ 147s —— 取决于单个 B-spline 面的控制点密度，而非零件大小或面数。</div></div>`;
+  }
+  if(m.status==='failed'){
+    return `<div class="card"><h2>④ 3D / 2D 对比</h2>
+      <div class="note bad" style="white-space:pre-wrap">${mk(m.error||'转换失败')}</div></div>`;
+  }
+  const d = m.drawing||{}, t = m.timing||{};
+  return `<div class="card"><h2>④ 3D / 2D 对比</h2>
+    <div class="bar">
+      <span class="tag">${esc(d.sheet)}</span><span class="tag">比例 ${esc(d.scale)}</span>
+      <span class="tag">${esc(d.projection)}</span><span class="tag">侧视图 ${esc(d.side)}</span>
+      <span class="tag">可见 ${d.n_visible} / 隐藏 ${d.n_hidden}${d.hidden_drawn?'':' 未绘制'}</span>
+      <div style="flex:1"></div>
+      <a href="/api/results/${encodeURIComponent(m.id)}/drawing.pdf" download><button>PDF</button></a>
+      <a href="/api/results/${encodeURIComponent(m.id)}/drawing.dxf" download><button>DXF</button></a>
+    </div>
+    <div class="bar">
+      <span class="sync">相机对准 →</span>
+      <button data-v="front" onclick="setView('front')">主视图</button>
+      <button data-v="top" onclick="setView('top')">俯视图</button>
+      <button data-v="side" onclick="setView('side')">侧视图 ${esc(d.side)}</button>
+      <button data-v="iso" onclick="setView('iso')">等轴测</button>
+      <span class="sync" style="margin-left:6px">左侧 3D 可拖拽旋转 · 与右侧 2D 同向比对</span>
+      <div style="flex:1"></div>
+      <button onclick="fit2d()">2D 适应窗口</button>
+    </div>
+    <div class="split">
+      <div class="pane" id="view3d"><div class="lbl">3D 模型（可旋转）</div></div>
+      <div class="pane" id="view2d"><div class="lbl">2D 工程图</div></div>
+    </div>
+    ${d.side_fallback?`<div class="note warn">侧视图回退：<code>${esc(d.side_fallback[0].tried)}</code>
+      视图 OCCT HLR 返回空，失败实体 ${esc(d.side_fallback[0].bad_solids.join(', '))}。已自动改用另一侧（精确且完整）。</div>`:''}
+    ${d.dropped_edges?`<div class="note warn">已剔除 ${d.dropped_edges} 条越界垃圾边
+      —— OCCT HLR 缺陷，投影超出模型包围盒，几何上不可能。</div>`:''}
+    ${!d.hidden_drawn?`<div class="note">装配体默认不画隐藏线：${d.n_hidden} 条隐藏边画出来是一团糊，
+      导出耗时增加约 18 倍。真实装配图本就不画隐藏线。</div>`:''}
+    <div class="sub" style="margin-top:9px">耗时 · 读取 ${t.read}s · 3D ${t.glb??'—'}s ·
+      HLR ${t.hlr}s · 组装导出 ${t.export}s · 合计 <b style="color:var(--accent2)">${t.total}s</b></div></div>`;
+}
+
+async function mount(m){
+  const box3 = $('#view3d');
+  if(box3 && m.has_3d)
+    V3 = make3D(box3, `/api/results/${encodeURIComponent(m.id)}/model.glb`, m.view_dirs);
+  else if(box3)
+    box3.innerHTML = '<div class="empty">此模型无 3D 预览</div>';
+
+  const box2 = $('#view2d'); if(!box2) return;
+  const svg = await (await fetch(`/api/results/${encodeURIComponent(m.id)}/drawing.svg`)).text();
+  box2.insertAdjacentHTML('beforeend', svg);
+  const el = box2.querySelector('svg'); if(!el) return;
+  el.removeAttribute('width'); el.removeAttribute('height');
+  el.setAttribute('preserveAspectRatio','xMidYMid meet');
+  const vb = el.getAttribute('viewBox').split(/\s+/).map(Number);
+  let [x,y,w,h] = vb;
+  const apply = () => el.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  window.fit2d = () => { [x,y,w,h] = vb; apply(); };
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    const k = e.deltaY > 0 ? 1.12 : 1/1.12;
+    const r = el.getBoundingClientRect();
+    const mx = x + (e.clientX-r.left)/r.width*w, my = y + (e.clientY-r.top)/r.height*h;
+    x = mx-(mx-x)*k; y = my-(my-y)*k; w *= k; h *= k; apply();
+  }, {passive:false});
+  let drag = null;
+  el.addEventListener('pointerdown', e => { drag={px:e.clientX,py:e.clientY};
+    el.setPointerCapture(e.pointerId); el.style.cursor='grabbing'; });
+  el.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const r = el.getBoundingClientRect();
+    x -= (e.clientX-drag.px)*w/r.width; y -= (e.clientY-drag.py)*h/r.height;
+    drag = {px:e.clientX,py:e.clientY}; apply();
+  });
+  el.addEventListener('pointerup', () => { drag=null; el.style.cursor='grab'; });
+}
+
+loadList();
+</script>
+</body>
+</html>

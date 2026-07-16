@@ -1,0 +1,15 @@
+# draft-forge — Python dependencies
+# Tested with Python 3.11. Install with:  pip install -r requirements.txt
+
+# Geometry kernel (bundles OpenCASCADE via cadquery-ocp) + drawing export
+build123d==0.11.1
+ezdxf==1.4.4
+
+# SVG -> PDF (pure Python, no system cairo needed)
+svglib==2.0.2
+reportlab==5.0.0
+
+# Web backend
+fastapi==0.139.0
+uvicorn==0.51.0
+python-multipart==0.0.32
