@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>STEP → 2D 工程图转换</title>
+<title>Draft-Forge · 图纸自动化</title>
 <style>
   :root{
     --bg:#0f1412; --bg2:#151b19; --panel:#1a211e; --line:#2a3330; --ink:#dfe5e2;
@@ -15,21 +15,35 @@
   body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;
        font:13px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
   header{height:52px;padding:0 18px;border-bottom:1px solid var(--line);background:var(--bg2);
-         display:flex;align-items:center;gap:14px}
+         display:flex;align-items:center;gap:20px}
   h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.02em}
   h1 b{color:var(--accent)}
   .sub{color:var(--dim);font-size:11.5px;font-family:var(--mono)}
+  /* 顶部 tab：两个完全不同的功能，用 tab 分隔 */
+  .tabs{display:flex;gap:4px;margin-left:8px}
+  .tabs .tab{padding:7px 15px;border-radius:6px 6px 0 0;border:1px solid transparent;
+    border-bottom:none;background:none;color:var(--dim);cursor:pointer;font-size:13px;
+    font-weight:500;transition:.12s}
+  .tabs .tab:hover{color:var(--ink)}
+  .tabs .tab.on{background:var(--bg);color:var(--accent2);border-color:var(--line);
+    position:relative;top:1px}
+
   main{display:grid;grid-template-columns:266px 1fr;height:calc(100vh - 52px)}
-  aside{border-right:1px solid var(--line);background:var(--bg2);overflow-y:auto;padding:10px}
+  aside{border-right:1px solid var(--line);background:var(--bg2);overflow-y:auto;padding:10px;
+        display:flex;flex-direction:column}
   .content{overflow-y:auto;padding:14px}
 
   .upload{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;
           display:flex;flex-direction:column;gap:8px}
   .upload button{width:100%}
+  .upload label.fl{font-size:11px;color:var(--dim);margin-bottom:-4px}
+  .upload label.fl .req{color:var(--accent2)}
   input[type=file]{font:11px var(--mono);color:var(--dim);width:100%}
   input[type=file]::file-selector-button{font:inherit;background:var(--bg2);color:var(--ink);
     border:1px solid var(--line);border-radius:4px;padding:5px 10px;margin-right:8px;cursor:pointer}
   input[type=file]::file-selector-button:hover{border-color:var(--accent);color:var(--accent2)}
+  select,input[type=text]{font:12px var(--mono);background:var(--bg2);color:var(--ink);
+    border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%}
   button{font:12px/1 -apple-system,"PingFang SC",system-ui;padding:7px 13px;border-radius:5px;
     border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;
     transition:.12s}
@@ -90,6 +104,7 @@
   .tag.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent)}
   .tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent)}
   .tag.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
+  .tag.crit{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
   .note{padding:8px 11px;border-radius:4px;font-size:12px;margin-top:8px;
         background:var(--panel);border-left:2px solid var(--dim);color:var(--ink)}
   .note.ok{border-color:var(--ok)} .note.warn{border-color:var(--warn)}
@@ -107,37 +122,65 @@
         height:56vh;min-height:400px}
   #view3d{background:linear-gradient(180deg,#10201c,#0b1210)}
   #view3d canvas{display:block;width:100%;height:100%}
-  #view2d{background:#fff}
-  #view2d svg{width:100%;height:100%;display:block;cursor:grab}
+  #view2d,#procView{background:#fff}
+  #view2d svg,#procView svg{width:100%;height:100%;display:block;cursor:grab}
   .pane .lbl{position:absolute;top:8px;left:10px;font:10px var(--mono);letter-spacing:.1em;
              color:var(--dim);background:color-mix(in srgb,var(--bg) 75%,transparent);
              padding:3px 7px;border-radius:3px;pointer-events:none;z-index:2}
-  #view2d .lbl{color:#555;background:rgba(255,255,255,.8)}
+  #view2d .lbl,#procView .lbl{color:#555;background:rgba(255,255,255,.8)}
   .bar{display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap}
   .empty{color:var(--dim);text-align:center;padding:60px 20px;font-size:12.5px}
   .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);
         border-radius:50%;animation:r .8s linear infinite;display:inline-block}
   @keyframes r{to{transform:rotate(360deg)}}
   .sync{font-size:11px;color:var(--dim);font-family:var(--mono)}
+  .hide{display:none !important}
 </style>
 </head>
 <body>
 <header>
-  <h1>STEP <b>→</b> 2D 工程图转换</h1>
-  <span class="sub">三视图 · PMI 驱动标注</span>
+  <h1>Draft-Forge <b>·</b> 图纸自动化</h1>
+  <div class="tabs">
+    <button class="tab on" data-tab="step">STEP → 2D 工程图</button>
+    <button class="tab" data-tab="process">ECAD → 制程图纸</button>
+  </div>
+  <span class="sub" id="tabsub" style="margin-left:auto">三视图 · PMI 驱动标注</span>
 </header>
 
-<main>
+<!-- ══════════════ TAB 1：STEP → 2D 工程图 ══════════════ -->
+<main id="tab-step">
   <aside>
-    <!-- 上传放在左列顶部：导入后结果直接出现在正下方的列表里，视线不用来回跳 -->
     <div class="upload">
-      <input type="file" id="f" accept=".step,.stp,.STEP,.STP">
-      <button class="primary" id="go">开始转换</button>
+      <label class="fl">STEP 模型 <span class="req">*</span></label>
+      <input type="file" id="stepFile" accept=".step,.stp,.STEP,.STP">
+      <button class="primary" id="stepGo">开始转换</button>
     </div>
-    <div class="sub" style="margin:14px 4px 8px">历史</div>
-    <div id="list"></div>
+    <div class="sub" style="margin:14px 4px 8px">导入历史</div>
+    <div id="stepList" style="flex:1"></div>
   </aside>
-  <div class="content" id="detail"><div class="empty">选择 STEP 文件开始</div></div>
+  <div class="content" id="stepDetail"><div class="empty">选择 STEP 文件开始</div></div>
+</main>
+
+<!-- ══════════════ TAB 2：ECAD → 制程图纸 ══════════════ -->
+<main id="tab-process" class="hide">
+  <aside>
+    <div class="upload">
+      <label class="fl">Pick&amp;Place 贴装坐标 <span class="req">*</span></label>
+      <input type="file" id="procPnp" accept=".csv,.txt">
+      <label class="fl">Gerber 板框（可选）</label>
+      <input type="file" id="procOutline" accept=".gbr,.gm1,.gko,.txt">
+      <label class="fl">Gerber 锡膏焊盘（可选）</label>
+      <input type="file" id="procPaste" accept=".gbr,.gtp,.txt">
+      <label class="fl">工序</label>
+      <input type="text" id="procName" value="RX DA (Die Attach)">
+      <label class="fl">基准元件（可选，留空自动取）</label>
+      <input type="text" id="procDatum" placeholder="如 J1，留空自动">
+      <button class="primary" id="procGo">生成制程图纸</button>
+    </div>
+    <div class="sub" style="margin:14px 4px 8px">导入历史</div>
+    <div id="procList" style="flex:1"></div>
+  </aside>
+  <div class="content" id="procDetail"><div class="empty">上传 Pick&amp;Place 文件开始</div></div>
 </main>
 
 <!-- three.js 本地化（MIT），无 CDN 依赖，离线可跑。
@@ -160,7 +203,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const $ = s => document.querySelector(s);
-let cur = null, timer = null, V3 = null;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -169,7 +211,80 @@ const mk = s => esc(s)
   .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
   .replace(/`([^`]+?)`/g, '<code>$1</code>');
 
-// ─────────────────────────────────────────── 3D 视图
+const pill = (v, good) => `<span class="tag ${good?'ok':'bad'}">${esc(v)}</span>`;
+
+function closeMenus(){ document.querySelectorAll('.menu').forEach(m => m.remove()); }
+document.addEventListener('click', closeMenus);
+
+// ─────────────────────────────────────────── 顶部 tab 切换
+const TABSUB = {step:'三视图 · PMI 驱动标注', process:'坐标式标注 · 规则判公差'};
+document.querySelectorAll('.tabs .tab').forEach(b => b.onclick = () => {
+  const t = b.dataset.tab;
+  document.querySelectorAll('.tabs .tab').forEach(x => x.classList.toggle('on', x===b));
+  $('#tab-step').classList.toggle('hide', t!=='step');
+  $('#tab-process').classList.toggle('hide', t!=='process');
+  $('#tabsub').textContent = TABSUB[t];
+});
+
+// ─────────────────────────────────────────── 共享：2D SVG 平移/缩放查看器
+// STEP 的 2D 工程图与制程图纸都用它。返回 fit() 用于「适应窗口」。
+function mountSvg(box, svgText){
+  box.querySelectorAll('svg').forEach(s => s.remove());
+  box.insertAdjacentHTML('beforeend', svgText);
+  const el = box.querySelector('svg');
+  if(!el) return () => {};
+  el.removeAttribute('width'); el.removeAttribute('height');
+  el.setAttribute('preserveAspectRatio','xMidYMid meet');
+  const vb = el.getAttribute('viewBox').split(/\s+/).map(Number);
+  let [x,y,w,h] = vb;
+  const apply = () => el.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  const fit = () => { [x,y,w,h] = vb; apply(); };
+  el.addEventListener('wheel', e => {
+    e.preventDefault();
+    // 缩放步长按 deltaY 幅度算，但每次限幅 ±8%，避免触控板连发大 deltaY 时过灵敏。
+    const step = Math.max(-0.08, Math.min(0.08, e.deltaY * 0.0015));
+    const k = 1 + step;
+    const r = el.getBoundingClientRect();
+    const mx = x + (e.clientX-r.left)/r.width*w, my = y + (e.clientY-r.top)/r.height*h;
+    x = mx-(mx-x)*k; y = my-(my-y)*k; w *= k; h *= k; apply();
+  }, {passive:false});
+  let drag = null;
+  el.addEventListener('pointerdown', e => { drag={px:e.clientX,py:e.clientY};
+    el.setPointerCapture(e.pointerId); el.style.cursor='grabbing'; });
+  el.addEventListener('pointermove', e => {
+    if(!drag) return;
+    const r = el.getBoundingClientRect();
+    x -= (e.clientX-drag.px)*w/r.width; y -= (e.clientY-drag.py)*h/r.height;
+    drag = {px:e.clientX,py:e.clientY}; apply();
+  });
+  el.addEventListener('pointerup', () => { drag=null; el.style.cursor='grab'; });
+  return fit;
+}
+
+// ─────────────────────────────────────────── 共享：历史列表的「⋯ 删除」菜单
+function wireMenu(btn, onDel){
+  btn.onclick = e => {
+    e.stopPropagation();
+    const open = document.querySelector('.menu');
+    closeMenus();
+    if(open) return;                       // 再次点击同一按钮 = 关闭
+    const m = document.createElement('div');
+    m.className = 'menu';
+    m.innerHTML = `<button data-act="del">删除</button>`;
+    const r = btn.getBoundingClientRect();
+    m.style.left = (r.right - 84) + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    m.onclick = ev => ev.stopPropagation();
+    m.querySelector('[data-act=del]').onclick = async () => { closeMenus(); await onDel(); };
+    document.body.appendChild(m);
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   TAB 1：STEP → 2D 工程图    （API: /api/step/*）
+   ══════════════════════════════════════════════════════════════════════ */
+let cur = null, timer = null, V3 = null;
+
 // glTF 导出时 build123d 已把 OCCT 的 +Z up 转成 glTF 的 +Y up，
 // 故模型坐标 (x,y,z)_step -> (x, z, -y)_gltf。相机方向需同样映射。
 const toGltfDir = ([x, y, z]) => new THREE.Vector3(x, z, -y);
@@ -259,13 +374,9 @@ window.setView = key => {
     b.classList.toggle('on', b.dataset.v === key));
 };
 
-// ─────────────────────────────────────────── 列表 / 轮询
-function closeMenus(){ document.querySelectorAll('.menu').forEach(m => m.remove()); }
-document.addEventListener('click', closeMenus);
-
-async function loadList(){
-  const rs = await (await fetch('/api/results')).json();
-  $('#list').innerHTML = rs.map(r => `
+async function stepLoadList(){
+  const rs = await (await fetch('/api/step/results')).json();
+  $('#stepList').innerHTML = rs.map(r => `
     <div class="item ${r.id===cur?'on':''}" data-id="${esc(r.id)}">
       <div class="row">
         <div class="n">${esc(r.filename)}</div>
@@ -276,79 +387,59 @@ async function loadList(){
          :r.status==='failed'?'<span style="color:var(--bad)">✗</span>':'…'}</div>
     </div>`).join('') || '<div class="sub" style="padding:8px">暂无</div>';
 
-  $('#list').querySelectorAll('.item').forEach(el =>
-    el.onclick = e => { if(!e.target.closest('.dots')) open_(el.dataset.id); });
+  $('#stepList').querySelectorAll('.item').forEach(el =>
+    el.onclick = e => { if(!e.target.closest('.dots')) stepOpen(el.dataset.id); });
 
-  $('#list').querySelectorAll('.dots').forEach(b => b.onclick = e => {
-    e.stopPropagation();
-    const open = document.querySelector('.menu');
-    closeMenus();
-    if(open) return;                       // 再次点击同一按钮 = 关闭
+  $('#stepList').querySelectorAll('.dots').forEach(b => wireMenu(b, async () => {
     const id = b.dataset.more;
-    const m = document.createElement('div');
-    m.className = 'menu';
-    m.innerHTML = `<button data-act="del">删除</button>`;
-    const r = b.getBoundingClientRect();
-    m.style.left = (r.right - 84) + 'px';
-    m.style.top = (r.bottom + 4) + 'px';
-    m.onclick = ev => ev.stopPropagation();
-    m.querySelector('[data-act=del]').onclick = async () => {
-      closeMenus();
-      await fetch('/api/results/' + encodeURIComponent(id), {method:'DELETE'});
-      if(cur === id){                      // 删的是当前打开的 -> 清空右侧
-        cur = null; clearInterval(timer);
-        if(V3){ V3.dispose(); V3 = null; }
-        $('#detail').innerHTML = '<div class="empty">选择 STEP 文件开始</div>';
-      }
-      loadList();
-    };
-    document.body.appendChild(m);
-  });
+    await fetch('/api/step/results/' + encodeURIComponent(id), {method:'DELETE'});
+    if(cur === id){
+      cur = null; clearInterval(timer);
+      if(V3){ V3.dispose(); V3 = null; }
+      $('#stepDetail').innerHTML = '<div class="empty">选择 STEP 文件开始</div>';
+    }
+    stepLoadList();
+  }));
 }
 
-$('#go').onclick = async () => {
-  const f = $('#f').files[0];
+$('#stepGo').onclick = async () => {
+  const f = $('#stepFile').files[0];
   if(!f) return alert('请先选择 STEP 文件');
-  $('#go').disabled = true; $('#go').textContent = '上传中…';
+  $('#stepGo').disabled = true; $('#stepGo').textContent = '上传中…';
   const fd = new FormData(); fd.append('file', f);
   try{
-    const r = await (await fetch('/api/convert', {method:'POST', body:fd})).json();
-    await loadList(); open_(r.id);
-  } finally { $('#go').disabled = false; $('#go').textContent = '开始转换'; }
+    const r = await (await fetch('/api/step/convert', {method:'POST', body:fd})).json();
+    await stepLoadList(); stepOpen(r.id);
+  } finally { $('#stepGo').disabled = false; $('#stepGo').textContent = '开始转换'; }
 };
 
-async function open_(id){
+async function stepOpen(id){
   cur = id;
   clearInterval(timer); timer = null;
   if(V3){ V3.dispose(); V3 = null; }
-  await loadList();
+  await stepLoadList();
 
   // 只在「状态/阶段真的变了」时重渲染 —— 否则转换完成后每次轮询都会重建 3D、
   // 把用户选的视图重置回等轴测（看起来像一直在自己点「等轴测」）。
   let lastSig = null;
   const poll = async () => {
     let m;
-    try { m = await (await fetch('/api/results/' + encodeURIComponent(id))).json(); }
+    try { m = await (await fetch('/api/step/results/' + encodeURIComponent(id))).json(); }
     catch { return; }
     if(id !== cur) return;                       // 已切到别的模型，丢弃过期响应
     const sig = m.status + '|' + (m.stage || '');
-    if(sig !== lastSig){ lastSig = sig; render(m); }
+    if(sig !== lastSig){ lastSig = sig; stepRender(m); }
     if(m.status !== 'converting'){               // 到终态：停轮询、刷新列表
       clearInterval(timer); timer = null;
-      loadList();
+      stepLoadList();
     }
   };
   await poll();
-  // 仅当仍在转换中才开启轮询；已完成/失败的历史项不再轮询
   if(id === cur && timer === null && lastSig && lastSig.startsWith('converting'))
     timer = setInterval(poll, 1500);
 }
-window.open_ = open_;
 
-// ─────────────────────────────────────────── 渲染
-const pill = (v, good) => `<span class="tag ${good?'ok':'bad'}">${esc(v)}</span>`;
-
-function render(m){
+function stepRender(m){
   const P = [];
   P.push(`<div class="card"><h2>① 文件与协议</h2><dl class="kv">
     <dt>文件</dt><dd>${esc(m.filename)} · ${m.size_mb} MB · ${(m.n_entities||0).toLocaleString()} 实体</dd>
@@ -378,8 +469,7 @@ function render(m){
       <code>${esc(x.label)}</code> ${x.view?`<span class="sub">→ ${esc(x.view)} 视图</span>`
       :`<span class="sub">${esc(x.note)}</span>`}</div>`).join('')}</div>`:''}</div>`);
 
-  // —— 主角：3D/2D 对比放前面，细节折叠到后面
-  P.push(renderView(m));
+  P.push(stepRenderView(m));
 
   if(m.parts?.length){
     const low = m.parts.filter(p => p.confidence === 'low' || p.kind === '未识别').length;
@@ -400,8 +490,6 @@ function render(m){
 
   const g = m.geomcheck;
   if(g){
-    // 性能与质量是**两个独立的轴**：cp_max 决定 HLR 快慢，退化面决定几何健康度。
-    // 实测 100G DR1 装配体 cp_max 仅 120（性能轻），却含 6 个退化面（质量差）。
     const cls = g.perf_class==='重'?'bad':g.perf_class==='中'?'warn':'ok';
     const nd = g.degenerate?.length || 0;
     P.push(`<details class="fold"><summary>⑥ 几何体检
@@ -427,11 +515,11 @@ function render(m){
       </div></details>`);
   }
 
-  $('#detail').innerHTML = P.join('');
-  if(m.status==='done') mount(m);
+  $('#stepDetail').innerHTML = P.join('');
+  if(m.status==='done') stepMount(m);
 }
 
-function renderView(m){
+function stepRenderView(m){
   if(m.status==='converting'){
     const i = (m.stages||[]).indexOf(m.stage);
     return `<div class="card"><h2>④ 3D / 2D 对比</h2>
@@ -452,8 +540,8 @@ function renderView(m){
       <span class="tag">${esc(d.projection)}</span><span class="tag">侧视图 ${esc(d.side)}</span>
       <span class="tag">可见 ${d.n_visible} / 隐藏 ${d.n_hidden}${d.hidden_drawn?'':' 未绘制'}</span>
       <div style="flex:1"></div>
-      <a href="/api/results/${encodeURIComponent(m.id)}/drawing.pdf" download><button>PDF</button></a>
-      <a href="/api/results/${encodeURIComponent(m.id)}/drawing.dxf" download><button>DXF</button></a>
+      <a href="/api/step/results/${encodeURIComponent(m.id)}/drawing.pdf" download><button>PDF</button></a>
+      <a href="/api/step/results/${encodeURIComponent(m.id)}/drawing.dxf" download><button>DXF</button></a>
     </div>
     <div class="bar">
       <span class="sync">相机对准 →</span>
@@ -463,7 +551,7 @@ function renderView(m){
       <button data-v="iso" onclick="setView('iso')">等轴测</button>
       <span class="sync" style="margin-left:6px">左侧 3D 可拖拽旋转 · 与右侧 2D 同向比对</span>
       <div style="flex:1"></div>
-      <button onclick="fit2d()">2D 适应窗口</button>
+      <button onclick="window._stepFit&&window._stepFit()">2D 适应窗口</button>
     </div>
     <div class="split">
       <div class="pane" id="view3d"><div class="lbl">3D 模型（可旋转）</div></div>
@@ -479,47 +567,149 @@ function renderView(m){
       HLR ${t.hlr}s · 组装导出 ${t.export}s · 合计 <b style="color:var(--accent2)">${t.total}s</b></div></div>`;
 }
 
-async function mount(m){
+async function stepMount(m){
   const box3 = $('#view3d');
   if(V3){ V3.dispose(); V3 = null; }            // 释放旧 3D，避免 WebGL 上下文泄漏
   if(box3 && m.has_3d)
-    V3 = make3D(box3, `/api/results/${encodeURIComponent(m.id)}/model.glb`, m.view_dirs);
+    V3 = make3D(box3, `/api/step/results/${encodeURIComponent(m.id)}/model.glb`, m.view_dirs);
   else if(box3)
     box3.innerHTML = '<div class="empty">此模型无 3D 预览</div>';
 
   const box2 = $('#view2d'); if(!box2) return;
-  const svg = await (await fetch(`/api/results/${encodeURIComponent(m.id)}/drawing.svg`)).text();
-  box2.insertAdjacentHTML('beforeend', svg);
-  const el = box2.querySelector('svg'); if(!el) return;
-  el.removeAttribute('width'); el.removeAttribute('height');
-  el.setAttribute('preserveAspectRatio','xMidYMid meet');
-  const vb = el.getAttribute('viewBox').split(/\s+/).map(Number);
-  let [x,y,w,h] = vb;
-  const apply = () => el.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-  window.fit2d = () => { [x,y,w,h] = vb; apply(); };
-  el.addEventListener('wheel', e => {
-    e.preventDefault();
-    // 缩放步长按 deltaY 幅度算，但每次限幅 ±8%，避免触控板连发大 deltaY 时过灵敏。
-    const ZOOM = 0.0015;                                  // 灵敏度系数，越小越平缓
-    const step = Math.max(-0.08, Math.min(0.08, e.deltaY * ZOOM));
-    const k = 1 + step;
-    const r = el.getBoundingClientRect();
-    const mx = x + (e.clientX-r.left)/r.width*w, my = y + (e.clientY-r.top)/r.height*h;
-    x = mx-(mx-x)*k; y = my-(my-y)*k; w *= k; h *= k; apply();
-  }, {passive:false});
-  let drag = null;
-  el.addEventListener('pointerdown', e => { drag={px:e.clientX,py:e.clientY};
-    el.setPointerCapture(e.pointerId); el.style.cursor='grabbing'; });
-  el.addEventListener('pointermove', e => {
-    if(!drag) return;
-    const r = el.getBoundingClientRect();
-    x -= (e.clientX-drag.px)*w/r.width; y -= (e.clientY-drag.py)*h/r.height;
-    drag = {px:e.clientX,py:e.clientY}; apply();
-  });
-  el.addEventListener('pointerup', () => { drag=null; el.style.cursor='grab'; });
+  const svg = await (await fetch(`/api/step/results/${encodeURIComponent(m.id)}/drawing.svg`)).text();
+  window._stepFit = mountSvg(box2, svg);
 }
 
-loadList();
+/* ══════════════════════════════════════════════════════════════════════
+   TAB 2：ECAD → 制程图纸    （API: /api/process/*）
+   ══════════════════════════════════════════════════════════════════════ */
+let pcur = null;
+
+async function procLoadList(){
+  const rs = await (await fetch('/api/process/results')).json();
+  $('#procList').innerHTML = rs.map(r => `
+    <div class="item ${r.id===pcur?'on':''}" data-id="${esc(r.id)}">
+      <div class="row">
+        <div class="n">${esc(r.filename)}</div>
+        <button class="dots" data-more="${esc(r.id)}" title="更多">⋯</button>
+      </div>
+      <div class="m">${esc(r.proc||'制程图')} · ${r.n_comps!=null?r.n_comps+' 器件':''} ·
+        ${r.status==='done'?'<span style="color:var(--ok)">✓</span>'
+         :r.status==='failed'?'<span style="color:var(--bad)">✗</span>':'…'}</div>
+    </div>`).join('') || '<div class="sub" style="padding:8px">暂无</div>';
+
+  $('#procList').querySelectorAll('.item').forEach(el =>
+    el.onclick = e => { if(!e.target.closest('.dots')) procOpen(el.dataset.id); });
+
+  $('#procList').querySelectorAll('.dots').forEach(b => wireMenu(b, async () => {
+    const id = b.dataset.more;
+    await fetch('/api/process/results/' + encodeURIComponent(id), {method:'DELETE'});
+    if(pcur === id){
+      pcur = null;
+      $('#procDetail').innerHTML = '<div class="empty">上传 Pick&amp;Place 文件开始</div>';
+    }
+    procLoadList();
+  }));
+}
+
+$('#procGo').onclick = async () => {
+  const pnp = $('#procPnp').files[0];
+  if(!pnp) return alert('请先选择 Pick&Place 文件');
+  const fd = new FormData();
+  fd.append('pnp', pnp);
+  if($('#procOutline').files[0]) fd.append('outline', $('#procOutline').files[0]);
+  if($('#procPaste').files[0])   fd.append('paste',   $('#procPaste').files[0]);
+  fd.append('proc',  $('#procName').value || 'RX DA (Die Attach)');
+  fd.append('datum_ref', $('#procDatum').value.trim());
+  $('#procGo').disabled = true; $('#procGo').textContent = '生成中…';
+  try{
+    const r = await (await fetch('/api/process/convert', {method:'POST', body:fd})).json();
+    await procLoadList(); procOpen(r.id);
+  } finally { $('#procGo').disabled = false; $('#procGo').textContent = '生成制程图纸'; }
+};
+
+async function procOpen(id){
+  pcur = id;
+  await procLoadList();
+  let m;
+  try { m = await (await fetch('/api/process/results/' + encodeURIComponent(id))).json(); }
+  catch { return; }
+  if(id !== pcur) return;
+  procRender(m);
+}
+
+function procRender(m){
+  if(m.status === 'failed'){
+    $('#procDetail').innerHTML = `<div class="card"><h2>生成失败</h2>
+      <div class="note bad" style="white-space:pre-wrap">${mk(m.error||'解析失败')}</div></div>`;
+    return;
+  }
+  const kinds = m.kinds || {};
+  const kindsStr = Object.entries(kinds).map(([k,v])=>`${esc(k)}×${v}`).join(' · ') || '—';
+  const dt = m.datum || {};
+  const P = [];
+
+  P.push(`<div class="card"><h2>① 输入与基准</h2><dl class="kv">
+    <dt>贴装坐标</dt><dd>${esc(m.filename)} · <b style="color:var(--accent2)">${m.n_comps??0}</b> 个顶层器件</dd>
+    <dt>板框</dt><dd>${m.has_outline?`<span class="tag ok">已解析</span> <span class="sub">${esc(m.outline_name||'')}</span>`
+      :'<span class="tag warn">未提供</span> <span class="sub">缺省不画 PCB 外形</span>'}</dd>
+    <dt>焊盘</dt><dd>${m.n_pads?`<span class="tag ok">${m.n_pads} 个</span> <span class="sub">${esc(m.paste_name||'')}</span>`
+      :'<span class="tag warn">未提供</span> <span class="sub">缺省不画焊盘</span>'}</dd>
+    <dt>工序</dt><dd><code>${esc(m.proc)}</code></dd>
+    <dt>基准元件</dt><dd><code>${esc(dt.designator||'?')}</code>
+      <span class="sub">@ (${dt.x}, ${dt.y}) mm · 相对此点标注</span></dd>
+    <dt>器件分类</dt><dd class="sub">${kindsStr}</dd>
+    <dt>公差</dt><dd>关键 <code>±${m.tol_critical}</code> · 默认 <code>±${m.tol_default}</code>
+      <span class="sub">IPC-7351</span></dd>
+  </dl>
+  <div class="note warn">基准选择与关键器件清单为<b>演示假设</b>（关键=IC/连接器，基准=器件群左下角）。
+  实际项目应按客户工艺基准规范与关键器件清单确定，工序名/图号/审核链从 PLM 取。</div></div>`);
+
+  P.push(`<div class="card"><h2>② 制程图纸</h2>
+    <div class="bar">
+      <span class="tag">${esc(m.proc)}</span>
+      <span class="tag">${m.n_comps??0} 器件</span>
+      ${m.has_outline?'<span class="tag ok">板框</span>':''}
+      ${m.n_pads?`<span class="tag ok">${m.n_pads} 焊盘</span>`:''}
+      <span class="tag crit">${(m.critical||[]).length} 关键器件</span>
+      <div style="flex:1"></div>
+      ${m.has_pdf?`<a href="/api/process/results/${encodeURIComponent(m.id)}/drawing.pdf" download><button>PDF</button></a>`:''}
+      <button onclick="window._procFit&&window._procFit()">适应窗口</button>
+    </div>
+    <div class="pane" id="procView" style="height:64vh"><div class="lbl">制程图纸（可缩放/拖拽）</div></div>
+  </div>`);
+
+  if((m.critical||[]).length){
+    P.push(`<details class="fold" open><summary>③ 关键器件坐标
+      <span class="hint">${m.critical.length} 个 · 相对基准 ${esc(dt.designator||'')}</span></summary>
+      <div class="body"><table><thead><tr><th>器件</th><th>类别</th><th>X (mm)</th><th>Y (mm)</th><th>公差</th></tr></thead>
+      <tbody>${m.critical.map(c=>`<tr><td><b>${esc(c.designator)}</b></td><td>${esc(c.kind)}</td>
+        <td><code>${c.dx>=0?'+':''}${c.dx}</code></td><td><code>${c.dy>=0?'+':''}${c.dy}</code></td>
+        <td class="sub">±${c.tol}</td></tr>`).join('')}</tbody></table></div></details>`);
+  }
+
+  if((m.parts||[]).length){
+    P.push(`<details class="fold"><summary>④ 全部器件
+      <span class="hint">${m.parts.length} 个 · 点击展开</span></summary>
+      <div class="body"><table><thead><tr><th>器件</th><th>类别</th><th>关键</th><th>X (mm)</th><th>Y (mm)</th></tr></thead>
+      <tbody>${m.parts.map(p=>`<tr><td><b>${esc(p.designator)}</b></td><td>${esc(p.kind)}</td>
+        <td>${p.critical?'<span class="tag crit">关键</span>':'<span class="sub">—</span>'}</td>
+        <td><code>${p.x}</code></td><td><code>${p.y}</code></td></tr>`).join('')}</tbody></table></div></details>`);
+  }
+
+  $('#procDetail').innerHTML = P.join('');
+  if(m.status === 'done') procMount(m);
+}
+
+async function procMount(m){
+  const box = $('#procView'); if(!box) return;
+  const svg = await (await fetch(`/api/process/results/${encodeURIComponent(m.id)}/drawing.svg`)).text();
+  window._procFit = mountSvg(box, svg);
+}
+
+// ─────────────────────────────────────────── 启动
+stepLoadList();
+procLoadList();
 </script>
 </body>
 </html>

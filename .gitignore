@@ -7,6 +7,13 @@ parts_real/
 *.STP
 *.brep
 
+# ── ECAD 输入（Pick&Place / Gerber）—— 同 CAD 模型，外部提供，不进工程 ──
+#    示例数据见 ../ecad_proto/data/（MosaicBus，MIT）；运行时经网页上传
+*.gbr
+*.gtp
+*.gm1
+*.gko
+
 # ── Generated output — reproducible, not source ──
 # web app conversion results (meta.json + drawings + glTF)
 results/
