@@ -214,19 +214,33 @@ def _load_view(name: str, d: dict) -> View:
     return v
 
 
-def project_views_parallel(src: Path, shape: bd.Shape, side: str = "auto"):
-    """并行版三视图 HLR。实测 LSB400: 165s -> ~101s (1.71x)。
+def project_views_parallel(src: Path, shape: bd.Shape, side: str = "auto",
+                           max_workers: int | None = None):
+    """在子进程里跑三视图 HLR。返回 (views, side, notes)。
 
-    四个方向一起投（含备选的左视图）—— 多跑一个视图在并行下不占墙钟，
-    却省掉「右视图失败后再串行补跑左视图」的一轮。
+    max_workers 语义（这是稳定性的关键旋钮）：
+      · None（默认，CLI 用）：4 路并发，最快。实测 LSB400 165s -> ~101s。
+        但多个 OCCT 进程并发存在**间歇性竞争崩溃**（实测 nist_ftc_07 会随机
+        触发 worker 段错误）；崩了抛 BrokenProcessPool，自动回退串行。
+      · 1（服务端用）：**单子进程串行**跑四个方向。没有并发竞争，永不崩；
+        且 HLR 在子进程里，主线程（uvicorn 事件循环）只等 I/O、不被 GIL 饿死，
+        服务保持响应。代价：LSB400 慢些，但不冻界面、不崩服务。
+
+    → 服务端务必传 max_workers=1：既隔离 OCCT 崩溃、又不阻塞事件循环。
+      直接在主线程串行跑 project_views() 会因 OCCT 长时间持 GIL 冻住整个服务。
     """
     import tempfile
-    from concurrent.futures import ProcessPoolExecutor
+    from concurrent.futures import BrokenExecutor, ProcessPoolExecutor
 
+    workers = max_workers if max_workers else min(4, (os.cpu_count() or 4))
     names = ["front", "top", "right", "left"]
     with tempfile.TemporaryDirectory() as td:
-        with ProcessPoolExecutor(max_workers=min(4, (os.cpu_count() or 4))) as ex:
-            got = dict(ex.map(_hlr_worker, [(str(src), n, td) for n in names]))
+        try:
+            with ProcessPoolExecutor(max_workers=workers) as ex:
+                got = dict(ex.map(_hlr_worker, [(str(src), n, td) for n in names]))
+        except (BrokenExecutor, OSError):
+            # 子进程崩了 -> 回退到本进程串行（可靠但慢；仅 CLI 会走到这里）
+            return project_views(shape, side)
 
         bb = shape.bounding_box()
         center = (bb.center().X, bb.center().Y, bb.center().Z)
