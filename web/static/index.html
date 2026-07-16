@@ -318,16 +318,30 @@ $('#go').onclick = async () => {
 };
 
 async function open_(id){
-  cur = id; clearInterval(timer);
+  cur = id;
+  clearInterval(timer); timer = null;
   if(V3){ V3.dispose(); V3 = null; }
   await loadList();
-  const tick = async () => {
-    const m = await (await fetch('/api/results/' + encodeURIComponent(id))).json();
-    render(m);
-    if(m.status !== 'converting'){ clearInterval(timer); loadList(); }
+
+  // 只在「状态/阶段真的变了」时重渲染 —— 否则转换完成后每次轮询都会重建 3D、
+  // 把用户选的视图重置回等轴测（看起来像一直在自己点「等轴测」）。
+  let lastSig = null;
+  const poll = async () => {
+    let m;
+    try { m = await (await fetch('/api/results/' + encodeURIComponent(id))).json(); }
+    catch { return; }
+    if(id !== cur) return;                       // 已切到别的模型，丢弃过期响应
+    const sig = m.status + '|' + (m.stage || '');
+    if(sig !== lastSig){ lastSig = sig; render(m); }
+    if(m.status !== 'converting'){               // 到终态：停轮询、刷新列表
+      clearInterval(timer); timer = null;
+      loadList();
+    }
   };
-  await tick();
-  timer = setInterval(tick, 1500);
+  await poll();
+  // 仅当仍在转换中才开启轮询；已完成/失败的历史项不再轮询
+  if(id === cur && timer === null && lastSig && lastSig.startsWith('converting'))
+    timer = setInterval(poll, 1500);
 }
 window.open_ = open_;
 
@@ -467,6 +481,7 @@ function renderView(m){
 
 async function mount(m){
   const box3 = $('#view3d');
+  if(V3){ V3.dispose(); V3 = null; }            // 释放旧 3D，避免 WebGL 上下文泄漏
   if(box3 && m.has_3d)
     V3 = make3D(box3, `/api/results/${encodeURIComponent(m.id)}/model.glb`, m.view_dirs);
   else if(box3)
