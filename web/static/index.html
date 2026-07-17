@@ -42,8 +42,16 @@
   input[type=file]::file-selector-button{font:inherit;background:var(--bg2);color:var(--ink);
     border:1px solid var(--line);border-radius:4px;padding:5px 10px;margin-right:8px;cursor:pointer}
   input[type=file]::file-selector-button:hover{border-color:var(--accent);color:var(--accent2)}
-  select,input[type=text]{font:12px var(--mono);background:var(--bg2);color:var(--ink);
-    border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%}
+  select,input[type=text],input[type=date]{font:12px var(--mono);background:var(--bg2);
+    color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%}
+  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7)}
+  /* 模板字段表单（右侧上部）：按模板扫出的占位符动态生成，多列网格铺开 */
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:9px 14px}
+  .fgrid .f{display:flex;flex-direction:column;gap:3px}
+  .fgrid .f label{font-size:10.5px;color:var(--dim);font-family:var(--mono);
+    letter-spacing:.04em}
+  .fgrid .f input{width:100%}
+  .fbar{display:flex;align-items:center;gap:10px;margin-top:12px}
   button{font:12px/1 -apple-system,"PingFang SC",system-ui;padding:7px 13px;border-radius:5px;
     border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;
     transition:.12s}
@@ -123,11 +131,13 @@
   #view3d{background:linear-gradient(180deg,#10201c,#0b1210)}
   #view3d canvas{display:block;width:100%;height:100%}
   #view2d,#procView{background:#fff}
-  #view2d svg,#procView svg{width:100%;height:100%;display:block;cursor:grab}
+  /* ⚠️ 新增图纸面板务必加进这里：mountSvg 会删掉 svg 的 width/height 属性，
+     全靠这条把它约束在面板内。漏了就会按固有尺寸溢出、底部被裁（「适应窗口」看着失效）。 */
+  #view2d svg,#procView svg,#tmView svg{width:100%;height:100%;display:block;cursor:grab}
   .pane .lbl{position:absolute;top:8px;left:10px;font:10px var(--mono);letter-spacing:.1em;
              color:var(--dim);background:color-mix(in srgb,var(--bg) 75%,transparent);
              padding:3px 7px;border-radius:3px;pointer-events:none;z-index:2}
-  #view2d .lbl,#procView .lbl{color:#555;background:rgba(255,255,255,.8)}
+  #view2d .lbl,#procView .lbl,#tmView .lbl{color:#555;background:rgba(255,255,255,.8)}
   .bar{display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap}
   .empty{color:var(--dim);text-align:center;padding:60px 20px;font-size:12.5px}
   .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);
@@ -141,14 +151,15 @@
 <header>
   <h1>Draft-Forge <b>·</b> 工程图纸</h1>
   <div class="tabs">
-    <button class="tab on" data-tab="step">STEP → 2D 工程图</button>
+    <button class="tab on" data-tab="tmpl">STEP + DXF → 图纸</button>
+    <button class="tab" data-tab="step">STEP → 2D 工程图</button>
     <button class="tab" data-tab="process">ECAD → 制程图纸</button>
   </div>
-  <span class="sub" id="tabsub" style="margin-left:auto">三视图 · PMI 驱动标注</span>
+  <span class="sub" id="tabsub" style="margin-left:auto">换视图几何 · 标注不动 · 信息填充</span>
 </header>
 
 <!-- ══════════════ TAB 1：STEP → 2D 工程图 ══════════════ -->
-<main id="tab-step">
+<main id="tab-step" class="hide">
   <aside>
     <div class="upload">
       <label class="fl">STEP 模型 <span class="req">*</span></label>
@@ -181,6 +192,22 @@
     <div id="procList" style="flex:1"></div>
   </aside>
   <div class="content" id="procDetail"><div class="empty">上传 Pick&amp;Place 文件开始</div></div>
+</main>
+
+<!-- ══════════════ TAB 3：STEP + 模板 → 成品图纸 ══════════════ -->
+<main id="tab-tmpl">
+  <aside>
+    <div class="upload">
+      <label class="fl">图纸模板 DXF <span class="req">*</span></label>
+      <input type="file" id="tmDxf" accept=".dxf">
+      <label class="fl">STEP 模型 <span class="req">*</span></label>
+      <input type="file" id="tmStep" accept=".step,.stp,.STEP,.STP">
+      <button class="primary" id="tmGo">生成图纸</button>
+    </div>
+    <div class="sub" style="margin:14px 4px 8px">导入历史</div>
+    <div id="tmList" style="flex:1"></div>
+  </aside>
+  <div class="content" id="tmDetail"><div class="empty">左侧选择模板 DXF + STEP 模型，点「生成图纸」</div></div>
 </main>
 
 <!-- three.js 本地化（MIT），无 CDN 依赖，离线可跑。
@@ -217,12 +244,13 @@ function closeMenus(){ document.querySelectorAll('.menu').forEach(m => m.remove(
 document.addEventListener('click', closeMenus);
 
 // ─────────────────────────────────────────── 顶部 tab 切换
-const TABSUB = {step:'三视图 · PMI 驱动标注', process:'坐标式标注 · 规则判公差'};
+const TABSUB = {tmpl:'换视图几何 · 标注不动 · 信息填充',
+                step:'三视图 · PMI 驱动标注', process:'坐标式标注 · 规则判公差'};
+const TABS = ['tmpl', 'step', 'process'];
 document.querySelectorAll('.tabs .tab').forEach(b => b.onclick = () => {
   const t = b.dataset.tab;
   document.querySelectorAll('.tabs .tab').forEach(x => x.classList.toggle('on', x===b));
-  $('#tab-step').classList.toggle('hide', t!=='step');
-  $('#tab-process').classList.toggle('hide', t!=='process');
+  TABS.forEach(k => $('#tab-'+k).classList.toggle('hide', k!==t));
   $('#tabsub').textContent = TABSUB[t];
 });
 
@@ -714,9 +742,193 @@ async function procMount(m){
   window._procFit = mountSvg(box, svg);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   TAB 3：STEP + 模板 → 成品图纸    （API: /api/tmpl/*）
+   ══════════════════════════════════════════════════════════════════════ */
+let tcur = null;
+
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+// 图纸上的日期写成 2026/7/17 这种样式，而 <input type=date> 用 2026-07-17
+const dashToSlash = s => s ? s.split('-').map(x => String(Number(x))).join('/') : '';
+
+// 左侧只管「选文件 -> 出预览」。字段在右侧对着图填。
+$('#tmGo').onclick = async () => {
+  const dxf = $('#tmDxf').files[0], step = $('#tmStep').files[0];
+  if(!dxf) return alert('请选择图纸模板 DXF');
+  if(!step) return alert('请选择 STEP 模型');
+  const fd = new FormData();
+  fd.append('dxf', dxf); fd.append('step', step);
+  $('#tmGo').disabled = true; $('#tmGo').textContent = '生成中…';
+  try{
+    const r = await (await fetch('/api/tmpl/convert', {method:'POST', body:fd})).json();
+    await tmLoadList(); tmOpen(r.id);
+  } finally { $('#tmGo').disabled = false; $('#tmGo').textContent = '生成图纸'; }
+};
+
+// 「重新生成」：只把字段填进去重出图 —— 走 refill，不重跑 HLR，秒出
+window.tmRefill = async () => {
+  if(!tcur) return;
+  const vals = {};
+  document.querySelectorAll('#tmForm [data-k]').forEach(el => {
+    const v = el.type === 'date' ? dashToSlash(el.value) : el.value.trim();
+    if(v) vals[el.dataset.k] = v;
+  });
+  const btn = $('#tmFillBtn');
+  const fd = new FormData(); fd.append('fields', JSON.stringify(vals));
+  if(btn){ btn.disabled = true; btn.textContent = '生成中…'; }
+  try{
+    await fetch(`/api/tmpl/results/${encodeURIComponent(tcur)}/refill`,
+                {method:'POST', body:fd});
+    const m = await (await fetch('/api/tmpl/results/' + encodeURIComponent(tcur))).json();
+    tmRender(m);                      // 重渲染（表单值从 meta.fields 回填）
+  } finally { if(btn){ btn.disabled = false; btn.textContent = '更新图纸'; } }
+};
+
+async function tmLoadList(){
+  const rs = await (await fetch('/api/tmpl/results')).json();
+  $('#tmList').innerHTML = rs.map(r => `
+    <div class="item ${r.id===tcur?'on':''}" data-id="${esc(r.id)}">
+      <div class="row">
+        <div class="n">${esc(r.filename)}</div>
+        <button class="dots" data-more="${esc(r.id)}" title="更多">⋯</button>
+      </div>
+      <div class="m">${esc(r.step_name||'')} ${r.scale?'· '+r.scale+':1':''} ·
+        ${r.status==='done'?'<span style="color:var(--ok)">✓</span>'
+         :r.status==='failed'?'<span style="color:var(--bad)">✗</span>':'…'}</div>
+    </div>`).join('') || '<div class="sub" style="padding:8px">暂无</div>';
+
+  $('#tmList').querySelectorAll('.item').forEach(el =>
+    el.onclick = e => { if(!e.target.closest('.dots')) tmOpen(el.dataset.id); });
+  $('#tmList').querySelectorAll('.dots').forEach(b => wireMenu(b, async () => {
+    const id = b.dataset.more;
+    await fetch('/api/tmpl/results/' + encodeURIComponent(id), {method:'DELETE'});
+    if(tcur === id){
+      tcur = null;
+      $('#tmDetail').innerHTML = '<div class="empty">左侧选择模板 DXF + STEP 模型，点「生成图纸」</div>';
+    }
+    tmLoadList();
+  }));
+}
+
+async function tmOpen(id){
+  tcur = id;
+  await tmLoadList();
+  let m;
+  try { m = await (await fetch('/api/tmpl/results/' + encodeURIComponent(id))).json(); }
+  catch { return; }
+  if(id !== tcur) return;
+  tmRender(m);
+}
+
+function tmRender(m){
+  if(m.status === 'failed'){
+    $('#tmDetail').innerHTML = `<div class="card"><h2>生成失败</h2>
+      <div class="note bad" style="white-space:pre-wrap">${mk(m.error||'失败')}</div></div>`;
+    return;
+  }
+  const P = [];
+  // ① 待填字段 —— 放最上面，对着下面的图逐个填，填完点「重新生成并预览」
+  const keys = m.template_fields || [];
+  const vals = m.fields || {};
+  if(keys.length){
+    const done = (m.filled||[]).length;
+    P.push(`<div class="card"><h2>① 待填字段
+      <span class="hint" style="margin-left:auto;font-weight:400;letter-spacing:0;color:var(--dim)">
+        ${done}/${keys.length} 已填</span></h2>
+      <div class="fgrid" id="tmForm">
+        ${keys.map(k => {
+          const isDate = k.includes('DATE');
+          const v = vals[k] || '';
+          // 日期：图上写 2026/7/17，控件要 2026-07-17；无值时默认今天
+          const dv = isDate ? (v ? v.split('/').map((x,i)=>i?String(x).padStart(2,'0'):x).join('-') : today()) : '';
+          return `<div class="f"><label>${esc(k)}</label>
+            ${isDate ? `<input type="date" data-k="${esc(k)}" value="${dv}">`
+                     : `<input type="text" data-k="${esc(k)}" value="${esc(v)}" placeholder="&lt;${esc(k)}&gt;">`}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="fbar">
+        <span class="sub">未填的字段在图上保持 <code>&lt;占位符&gt;</code> 原样</span>
+        <div style="flex:1"></div>
+        <button class="primary" id="tmFillBtn" onclick="tmRefill()">更新图纸</button>
+      </div>
+    </div>`);
+  }
+
+  // ② 图纸预览
+  P.push(`<div class="card"><h2>② 图纸预览</h2>
+    <div class="bar">
+      <span class="tag">${m.scale}:1</span>
+      <span class="tag">${(m.views||[]).length} 视图</span>
+      <span class="tag ok">${(m.filled||[]).length} 字段已填</span>
+      ${(m.missing||[]).length?`<span class="tag warn">${m.missing.length} 仍为占位符</span>`:''}
+      <div style="flex:1"></div>
+      ${m.has_pdf?`<a href="/api/tmpl/results/${encodeURIComponent(m.id)}/drawing.pdf" download><button class="primary">导出 PDF</button></a>`:''}
+      <a href="/api/tmpl/results/${encodeURIComponent(m.id)}/drawing.dxf" download><button>DXF</button></a>
+      <button onclick="window._tmFit&&window._tmFit()">适应窗口</button>
+    </div>
+    <div class="pane" id="tmView" style="height:60vh;background:#eaeae2">
+      <div class="lbl">橙色 = 程序填入的字段</div></div>
+  </div>`);
+
+  // ③ 模板与模型
+  P.push(`<div class="card"><h2>③ 模板与模型</h2><dl class="kv">
+    <dt>模板</dt><dd>${esc(m.filename)} · <b style="color:var(--accent2)">${m.n_template_views}</b> 个视图框</dd>
+    <dt>模型</dt><dd>${esc(m.step_name)} · 包围盒 <code>${(m.measured_bbox||[]).join(' × ')}</code> mm</dd>
+    <dt>比例</dt><dd><b style="color:var(--accent2)">${m.scale}:1</b>
+      <span class="sub">— 由模板里旧视图几何反推，非写死</span></dd>
+    <dt>比例一致性</dt><dd>${m.scale_consistent
+      ? `<span class="tag ok">✓ 一致</span> <span class="sub">三视图各自反推，偏差 ${m.scale_spread_pct}%</span>`
+      : `<span class="tag bad">⚠ 不一致 ${m.scale_spread_pct}%</span> <span class="sub">模板可能非等比</span>`}</dd>
+    ${m.scale_text ? `<dt>标题栏比例</dt><dd>${m.scale_text.ok
+      ? `<span class="tag ok">✓ 与图面一致</span> <span class="sub">模板写 ${m.scale_text.written}:1，反推 ${m.scale_text.derived}:1</span>`
+      : `<span class="tag bad">⚠ 与图面不符</span> <span class="sub">模板写 <b>${m.scale_text.written}:1</b>，但图面实为 <b>${m.scale_text.derived}:1</b> —— 标题栏是静态文字，改了视图画法它不会跟着变</span>`}</dd>` : ''}
+    <dt>视图替换</dt><dd>删除旧几何 <code>${m.n_old_edges}</code> 条 → 写入新投影 <code>${m.n_new_edges}</code> 条
+      <span class="sub">· 标注未改动</span></dd>
+  </dl>
+  <div class="note">标注是模板里画好的<b>静态文字</b>，换模型时不会跟着变。本工具只替换视图几何、填标题栏。</div>
+  </div>`);
+
+  const bad = (m.dim_checks||[]).filter(c => !c.ok);
+  P.push(`<details class="fold" ${bad.length?'open':''}><summary>④ 尺寸校验
+    <span class="hint">模板标注 vs 模型实测 · 通过 ${m.n_dim_ok} · 无法校验 ${m.n_dim_unverifiable}</span></summary>
+    <div class="body"><table><thead><tr><th>模板标注</th><th>公差</th><th>模型实测</th><th>结果</th></tr></thead>
+    <tbody>${(m.dim_checks||[]).map(c=>`<tr>
+      <td><code>${c.nominal}</code></td><td class="sub">±${c.tol}</td>
+      <td>${c.ok?`<code>${c.matched}</code>`:`<span class="sub">最近 ${c.nearest}（差 ${c.delta}）</span>`}</td>
+      <td>${c.ok?'<span class="tag ok">✓ 一致</span>':'<span class="tag warn">特征尺寸，包围盒测不了</span>'}</td>
+    </tr>`).join('')}</tbody></table>
+    <div class="note warn"><b>校验能力有边界。</b>包围盒只给外形尺寸，
+    台阶/倒角这类<b>特征尺寸测不了</b>。而且标注没覆盖到的特征（如台阶走向）
+    即便完全画错，也不会被这里拦住 —— 靠的是<b>模型与模板的配对管理</b>，别错配。</div>
+    </div></details>`);
+
+  if((m.views||[]).length){
+    P.push(`<details class="fold"><summary>⑤ 视图落位明细
+      <span class="hint">${m.views.length} 个 · 点击展开</span></summary>
+      <div class="body"><table><thead><tr><th>视图</th><th>图上中心</th><th>反推比例</th><th>图上尺寸</th></tr></thead>
+      <tbody>${m.views.map(v=>`<tr><td><b>${esc(v.view)}</b></td>
+        <td><code>(${v.cx}, ${v.cy})</code></td><td><code>${v.scale}</code></td>
+        <td class="sub">${v.w} × ${v.h} mm</td></tr>`).join('')}</tbody></table></div></details>`);
+  }
+
+  $('#tmDetail').innerHTML = P.join('');
+  if(m.status === 'done') tmMount(m);
+}
+
+async function tmMount(m){
+  const box = $('#tmView'); if(!box) return;
+  const svg = await (await fetch(`/api/tmpl/results/${encodeURIComponent(m.id)}/drawing.svg`)).text();
+  window._tmFit = mountSvg(box, svg);
+}
+
 // ─────────────────────────────────────────── 启动
 stepLoadList();
 procLoadList();
+tmLoadList();
 </script>
 </body>
 </html>
