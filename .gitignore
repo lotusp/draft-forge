@@ -37,6 +37,13 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
+# ── 样例测试数据 —— 例外：这些要入库，让 clone 后能直接验证 ──
+#    仅限公开数据集(NIST 公有领域 / MosaicBus MIT)与虚构样例，
+#    入库前经敏感信息扫描（企业名/水印/真实图号/导出路径），零命中。
+#    ⚠️ 客户提供的模型图纸一律不得放进来。
+!samples/
+!samples/**
+
 # ── OS / editor ──
 .DS_Store
 Thumbs.db

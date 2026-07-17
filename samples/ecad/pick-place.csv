@@ -1,0 +1,49 @@
+Altium Designer Pick and Place Locations
+Pick Place for Mosaic-Bus.csv
+
+========================================================================================================================
+File Design Information:
+
+Date:       28/07/23
+Time:       13:12
+Revision:   9413775d2e2d785ebd676defdd03e14f5f35cf2b
+Variant:    No variations
+Units used: mm
+
+"Designator","Layer","Footprint","Center-X(mm)","Center-Y(mm)","Rotation","Description"
+"C4","TopLayer","CAPC3317X190N","94.3610","56.4896","180","22uF Capacitor"
+"U1","TopLayer","Mosaic-x5","91.4300","74.6760","90","Septentrio Mosaic x5"
+"U5","TopLayer","QFN50P350X350X100-15N-D","86.8680","46.1010","180","3-State Output Driver"
+"R11","TopLayer","RESC1608X60N","84.9884","54.4830","270","330Ohm Resistor"
+"R10","TopLayer","RESC1608X60N","88.0364","54.4830","90","330Ohm Resistor"
+"R9","TopLayer","RESC1608X60N","89.5604","47.6504","90","10kOhm Resistor"
+"R8","TopLayer","RESC1608X60N","86.8426","51.4096","90","10kOhm Resistor"
+"D4","TopLayer","155060AS75300","84.9884","51.3080","270","Amber LED"
+"R7","TopLayer","RESC1608X60N","91.5670","53.0860","180","100kOhm Resistor"
+"R6","TopLayer","RESC1608X60N","97.2820","53.2130","270","22kOhm Resistor"
+"R5","TopLayer","RESC1608X60N","96.0120","53.2130","90","100kOhm Resistor"
+"R4","TopLayer","RESC1608X60N","98.1710","44.9580","270","10kOhm Resistor"
+"R3","TopLayer","RESC1608X60N","99.1870","35.9410","270","10kOhm Resistor"
+"R2","TopLayer","RESC1608X60N","95.3770","32.8930","180","5.1kOhm Resistor"
+"R1","TopLayer","RESC1608X60N","85.9790","34.4170","180","5.1kOhm Resistor"
+"J6","TopLayer","TECO-5-146280-2_V","102.8600","50.8000","90","Through hole pin"
+"J7","TopLayer","TECO-5-146280-2_V","102.8600","53.3400","90","Through hole pin"
+"J8","TopLayer","TECO-5-146280-2_V","102.8700","55.8800","90","Through hole pin"
+"L3","TopLayer","INDC2016X100N","91.5670","51.1810","0","470nH Inductor"
+"L2","TopLayer","744786139A","99.8728","91.0336","0","39nH Inductor"
+"L1","TopLayer","744786139A","105.9180","91.0336","0","39nH Inductor"
+"J5","TopLayer","MMCX-734151472","83.8200","94.1070","0","MMCX Connector"
+"J4","TopLayer","MMCX-734151472","99.0600","94.1070","0","MMCX Connector"
+"J3","BottomLayer","HDRV8W63P0X254_1X8_2032X254X970P","102.8600","38.1000","90","Headers & Wire Housings 8P SINGLE ROW"
+"J2","BottomLayer","HDRV8W63P0X254_1X8_2032X254X970P","80.0000","38.1000","90","Headers & Wire Housings 8P SINGLE ROW"
+"J1","TopLayer","USB412003C","91.3130","37.7190","90","USB-C Connector 16P Vertical"
+"D2","TopLayer","155060AS75300","88.0364","51.3080","270","Amber LED"
+"D1","TopLayer","TPD1E0B04DPYR","83.4898","91.3892","180","TVS Diode Bidirectional 1-Channel"
+"C5","TopLayer","CAPC1608X95N","94.7420","53.2130","90","10pF Capacitor"
+"C3","TopLayer","CAPC3317X190N","94.9960","45.3390","90","22uF Capacitor"
+"C2","BottomLayer","CAPC2012X145N","84.3280","68.8340","270","22uF Capacitor"
+"C1","TopLayer","CAPC0603X35N","102.9970","91.3638","270","100pF Capacitor"
+"U4","TopLayer","SOTFL50P160X60-8N","96.5200","49.5300","90","Switching Voltage Regulators"
+"U3","TopLayer","SOTFL50P160X60-8N","97.1550","40.5130","270","Power Multiplexer"
+"U2","BottomLayer","KCZ1210AH900HRTD25","83.9465","41.2750","0","Common Mode Filters / Chokes,"
+"D3","BottomLayer","TPD2E2U06QDCKRQ1","86.2330","37.7190","0","TVS Diode Unidirectional 2-Channel"

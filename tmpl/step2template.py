@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import build123d as bd
 import ezdxf
 from ezdxf.addons.drawing import Frontend, RenderContext, layout, svg
 from ezdxf.addons.drawing.config import BackgroundPolicy, Configuration
@@ -64,10 +65,32 @@ def cluster_views(msp, layer=VIEW_LAYER, gap=8.0) -> list:
     """
     items = []
     for e in msp:
-        if e.dxf.layer != layer or e.dxftype() != "LINE":
+        if e.dxf.layer != layer:
             continue
-        a, b = tuple(e.dxf.start)[:2], tuple(e.dxf.end)[:2]
-        items.append([min(a[0], b[0]), max(a[0], b[0]), min(a[1], b[1]), max(a[1], b[1])])
+        t = e.dxftype()
+        if t == "LINE":
+            a, b = tuple(e.dxf.start)[:2], tuple(e.dxf.end)[:2]
+            xs, ys = (a[0], b[0]), (a[1], b[1])
+        elif t == "CIRCLE":
+            # ⚠️ 必须纳入圆/圆弧：否则外轮廓是圆的视图（如法兰盘俯视图）包围盒会算小，
+            #    进而把反推比例算错。只看 LINE 会漏掉整圈边界。
+            c, r = tuple(e.dxf.center)[:2], e.dxf.radius
+            xs, ys = (c[0] - r, c[0] + r), (c[1] - r, c[1] + r)
+        elif t == "ARC":
+            # ⚠️ 圆弧不能用整圆外接框：一段大半径小圆弧（环面倒角投影）的 圆心±半径
+            #    会伸到视图外很远，把聚类框撑大。按实际起止角采样端点求真实范围。
+            import math
+            c, r = tuple(e.dxf.center)[:2], e.dxf.radius
+            a0, a1 = math.radians(e.dxf.start_angle), math.radians(e.dxf.end_angle)
+            if a1 < a0:
+                a1 += 2 * math.pi
+            angs = [a0 + (a1 - a0) * k / 8 for k in range(9)]
+            px = [c[0] + r * math.cos(a) for a in angs]
+            py = [c[1] + r * math.sin(a) for a in angs]
+            xs, ys = (min(px), max(px)), (min(py), max(py))
+        else:
+            continue
+        items.append([min(xs), max(xs), min(ys), max(ys)])
     groups = []
     for it in sorted(items):
         for g in groups:
@@ -179,13 +202,63 @@ def render(doc, sheet=(297.0, 210.0)) -> str:
     return b.get_string(layout.Page(sheet[0], sheet[1], layout.Units.mm))
 
 
+def _write_edge(msp, e, layer=VIEW_LAYER, seg=48) -> int:
+    """把一条投影边写进 DXF，返回写入的实体数。
+
+    按边的真实类型写对应的 DXF 实体，**不要一律离散成折线**：
+
+    · 直线 -> LINE。注意不能对所有边都「取首尾顶点连直线」：**圆等闭合边只有
+      1 个顶点**（实测 build123d 圆边 vertices() 长度为 1），那样整条边会被丢掉，
+      带孔的零件孔就没了。
+    · 圆   -> CIRCLE。离散成 48 边形有两个害处：① 拿回 CAD 一量不是真圆，与
+      「精确 B-rep 出图、圆是数学真圆」的前提自相矛盾；② 体积爆炸（实测某复杂件
+      859 条可见边 -> 36,062 条线 / 6.1MB）。
+    · 圆弧 -> ARC。同理。
+    · 其余（椭圆/样条…）才退化为折线。
+    """
+    gt = e.geom_type
+    if gt == bd.GeomType.LINE:
+        vs = e.vertices()
+        if len(vs) >= 2:
+            a, b = tuple(vs[0]), tuple(vs[-1])
+            msp.add_line((a[0], a[1]), (b[0], b[1]), dxfattribs={"layer": layer})
+            return 1
+        return 0
+
+    if gt == bd.GeomType.CIRCLE:
+        try:
+            c = e.arc_center
+            r = e.radius
+            # 投影后仍是圆 => 其所在平面平行于纸面，可安全写成 DXF 真圆/圆弧
+            if e.is_closed:
+                msp.add_circle((c.X, c.Y), r, dxfattribs={"layer": layer})
+            else:
+                p0, p1 = tuple(e @ 0), tuple(e @ 1)
+                import math
+                a0 = math.degrees(math.atan2(p0[1] - c.Y, p0[0] - c.X))
+                a1 = math.degrees(math.atan2(p1[1] - c.Y, p1[0] - c.X))
+                msp.add_arc((c.X, c.Y), r, a0, a1, dxfattribs={"layer": layer})
+            return 1
+        except Exception:
+            pass                            # 拿不到圆心/半径就退化为折线
+
+    try:                                    # 其余曲线：离散成折线（闭合边首尾自然相接）
+        pts = [tuple(e @ (i / seg)) for i in range(seg + 1)]
+    except Exception:
+        return 0
+    n = 0
+    for p, q in zip(pts, pts[1:]):
+        if abs(p[0] - q[0]) > 1e-9 or abs(p[1] - q[1]) > 1e-9:
+            msp.add_line((p[0], p[1]), (q[0], q[1]), dxfattribs={"layer": layer})
+            n += 1
+    return n
+
+
 def build(step_path, template_path, side_pref="right"):
     """换视图几何：模板 + 模型 -> (doc, info)。占位符**保持原样**，字段另由 fill() 填。
 
     这步含 HLR 投影，是慢的一步，故与 fill() 分开：只在换模型/模板时跑一次。
     """
-    import build123d as bd
-
     doc = ezdxf.readfile(str(template_path))
     msp = doc.modelspace()
 
@@ -223,11 +296,7 @@ def build(step_path, template_path, side_pref="right"):
         if c is None:
             continue
         for e in c.edges():
-            vs = e.vertices()
-            if len(vs) >= 2:
-                a, b = tuple(vs[0]), tuple(vs[-1])
-                msp.add_line((a[0], a[1]), (b[0], b[1]), dxfattribs={"layer": VIEW_LAYER})
-                n_new += 1
+            n_new += _write_edge(msp, e)
         placed_info.append({"view": name, "cx": round(v.x, 2), "cy": round(v.y, 2),
                             "scale": round(s, 3),
                             "w": round(v.w * s, 2), "h": round(v.h * s, 2)})
