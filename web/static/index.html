@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Draft-Forge · 图纸自动化</title>
+<title>Draft-Forge · 工程图纸</title>
 <style>
   :root{
     --bg:#0f1412; --bg2:#151b19; --panel:#1a211e; --line:#2a3330; --ink:#dfe5e2;
@@ -139,7 +139,7 @@
 </head>
 <body>
 <header>
-  <h1>Draft-Forge <b>·</b> 图纸自动化</h1>
+  <h1>Draft-Forge <b>·</b> 工程图纸</h1>
   <div class="tabs">
     <button class="tab on" data-tab="step">STEP → 2D 工程图</button>
     <button class="tab" data-tab="process">ECAD → 制程图纸</button>
@@ -421,14 +421,20 @@ async function stepOpen(id){
 
   // 只在「状态/阶段真的变了」时重渲染 —— 否则转换完成后每次轮询都会重建 3D、
   // 把用户选的视图重置回等轴测（看起来像一直在自己点「等轴测」）。
-  let lastSig = null;
+  let lastSig = null, built = false;
   const poll = async () => {
     let m;
     try { m = await (await fetch('/api/step/results/' + encodeURIComponent(id))).json(); }
     catch { return; }
     if(id !== cur) return;                       // 已切到别的模型，丢弃过期响应
     const sig = m.status + '|' + (m.stage || '');
-    if(sig !== lastSig){ lastSig = sig; stepRender(m); }
+    if(sig !== lastSig){
+      lastSig = sig;
+      // 转换途中切阶段：只换「进度卡」，上面的元信息卡不动 —— 避免整块面板闪。
+      const slot = document.querySelector('#stepViewSlot');
+      if(m.status === 'converting' && built && slot) slot.innerHTML = stepRenderView(m);
+      else { stepRender(m); built = true; }
+    }
     if(m.status !== 'converting'){               // 到终态：停轮询、刷新列表
       clearInterval(timer); timer = null;
       stepLoadList();
@@ -469,7 +475,8 @@ function stepRender(m){
       <code>${esc(x.label)}</code> ${x.view?`<span class="sub">→ ${esc(x.view)} 视图</span>`
       :`<span class="sub">${esc(x.note)}</span>`}</div>`).join('')}</div>`:''}</div>`);
 
-  P.push(stepRenderView(m));
+  // 用固定容器包住「进度/图纸卡」，转换途中只更新它，元信息卡不重绘
+  P.push(`<div id="stepViewSlot">${stepRenderView(m)}</div>`);
 
   if(m.parts?.length){
     const low = m.parts.filter(p => p.confidence === 'low' || p.kind === '未识别').length;
@@ -662,8 +669,8 @@ function procRender(m){
     <dt>公差</dt><dd>关键 <code>±${m.tol_critical}</code> · 默认 <code>±${m.tol_default}</code>
       <span class="sub">IPC-7351</span></dd>
   </dl>
-  <div class="note warn">基准选择与关键器件清单为<b>演示假设</b>（关键=IC/连接器，基准=器件群左下角）。
-  实际项目应按客户工艺基准规范与关键器件清单确定，工序名/图号/审核链从 PLM 取。</div></div>`);
+  <div class="note warn">基准与关键器件清单为<b>演示假设</b>（关键=光路/有源器件 TIA/PD/FA/IC…，其余取默认公差；
+  基准可指定，未指定则取关键器件群一角）。实际项目应按客户工艺基准规范与关键器件清单确定，工序名/图号/审核链从 PLM 取。</div></div>`);
 
   P.push(`<div class="card"><h2>② 制程图纸</h2>
     <div class="bar">

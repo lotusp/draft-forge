@@ -123,7 +123,17 @@ def _convert(step_path: Path, outdir: Path, opts: dict, title: str):
     try:
         _write(outdir, stage="读取模型")
         shape = bd.import_step(str(step_path))
-        bb = shape.bounding_box()
+
+        # ⚠️ 只取**实体**做出图/量尺寸。STEP 里常挂着自由曲线几何 —— PMI 图形标注
+        #    折线、构造/参考几何（GEOMETRIC_CURVE_SET / CONSTRUCTIVE_GEOMETRY，
+        #    NIST CTC 系列尤其多）。它们漂浮在零件外围、伸出很远：
+        #      · HLR 会把这些边也投进视图，俯视图里凭空多出一圈方框；
+        #      · 整个 shape 的包围盒被撑大（实测 CTC-01 真实 800×450 被撑到 1170×650），
+        #        导致总体尺寸标注也偏大。
+        #    3D 预览本就只导实体，这里让 2D 与之对齐：投影同一份实体几何。
+        _solids = shape.solids()
+        draw = bd.Compound(children=_solids) if _solids else shape
+        bb = draw.bounding_box()
         t_read = time.perf_counter() - t0
 
         _write(outdir, stage="几何体检")
@@ -136,8 +146,7 @@ def _convert(step_path: Path, outdir: Path, opts: dict, title: str):
             # ⚠️ import_step 返回的是**没有子节点的 Solid**，而 export_gltf 靠
             #    PreOrderIter 遍历节点树 —— 直接导出会得到空 glTF（只有 240 字节，
             #    accessors 为空）。必须用 Compound(children=solids()) 重建节点树。
-            mesh = bd.Compound(children=shape.solids())
-            bd.export_gltf(mesh, str(outdir / "model.glb"), binary=True,
+            bd.export_gltf(draw, str(outdir / "model.glb"), binary=True,
                            linear_deflection=0.08, angular_deflection=0.4)
         except Exception:
             pass                      # 3D 预览失败不应阻断出图主流程
@@ -145,7 +154,7 @@ def _convert(step_path: Path, outdir: Path, opts: dict, title: str):
 
         _write(outdir, stage="HLR 投影")
         t = time.perf_counter()
-        views, side, notes = s2d.project_views(shape, "auto")
+        views, side, notes = s2d.project_views(draw, "auto")
         t_hlr = time.perf_counter() - t
 
         _write(outdir, stage="组装出图")

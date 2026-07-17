@@ -38,8 +38,16 @@ from pathlib import Path
 
 # ── 器件分类：designator 前缀 → 类别 + 是否在光路（决定公差） ──
 #   「光路器件从严」是从客户 RX DA 图纸归纳的规律（TIA/PD ±0.02，电容 ±0.05）。
-#   MosaicBus 是 GNSS 板、无光器件，这里把「有源芯片 U*」当作关键器件演示从严逻辑。
+#   前缀支持**多字母**（TIA/PD/FA/LN…），查不到再退化到首字母，兼容 R/C/U 单字母。
+#   MosaicBus 是 GNSS 板、无光器件，用「有源芯片 U*」演示从严逻辑；
+#   光模块 RX DA 场景则由 TIA/PD/FA/LN 这几类承接（皆为光路器件，从严 ±0.02）。
 CLASSES = {
+    # —— 光模块光路器件（客户 RX DA）——
+    "TIA": ("TIA 跨阻放大器", True,  "光路核心，位置关键"),
+    "PD":  ("PD 光电探测器",  True,  "光路基准器件"),
+    "FA":  ("光纤阵列 FA",    True,  "光路耦合，位置关键"),
+    "LN":  ("透镜 Lens",      True,  "光路耦合，位置关键"),
+    # —— 通用 PCB 器件 ——
     "U": ("IC 芯片",   True,  "有源器件，位置关键"),
     "D": ("二极管/LED", False, ""),
     "R": ("电阻",      False, ""),
@@ -68,8 +76,9 @@ class Comp:
 
     @property
     def prefix(self) -> str:
+        # 完整字母前缀（TIA1 -> TIA、C4 -> C）；分类时先按全前缀查，再退化到首字母
         m = re.match(r"[A-Za-z]+", self.designator)
-        return m.group(0)[0].upper() if m else "?"
+        return m.group(0).upper() if m else "?"
 
 
 # ── 读 Gerber 板框外形层（Profile）——只取折线顶点，得到真实 PCB 轮廓 ──
@@ -167,7 +176,8 @@ def read_pnp(path: Path, layer: str = "TopLayer") -> list[Comp]:
             )
         except (ValueError, KeyError):
             continue
-        kind, crit, _ = CLASSES.get(c.prefix, ("未识别", False, ""))
+        # 先按完整字母前缀查（TIA/PD/FA/LN），查不到退化到首字母（R/C/U…）
+        kind, crit, _ = CLASSES.get(c.prefix) or CLASSES.get(c.prefix[0], ("未识别", False, ""))
         c.kind, c.critical = kind, crit
         out.append(c)
     return out
